@@ -1,0 +1,70 @@
+{
+  "name": "@waylaidwanderer/chatgpt-api",
+  "version": "1.37.3",
+  "description": "A ChatGPT implementation using the official ChatGPT model via OpenAI's API.",
+  "main": "index.js",
+  "bin": {
+    "chatgpt-api": "bin/server.js",
+    "chatgpt-cli": "bin/cli.js"
+  },
+  "scripts": {
+    "test": "npx eslint .",
+    "start": "node bin/server.js",
+    "server": "node bin/server.js",
+    "cli": "node bin/cli.js",
+    "dev:debug:server": "nodemon --ignore cache.json --inspect=0.0.0.0:9229 bin/server.js",
+    "dev:debug:cli": "nodemon --ignore cache.json --inspect=0.0.0.0:9228 bin/cli.js"
+  },
+  "author": "waylaidwanderer",
+  "license": "MIT",
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/waylaidwanderer/node-chatgpt-api.git"
+  },
+  "keywords": [
+    "api",
+    "cli",
+    "bing",
+    "api-server",
+    "openai",
+    "api-rest",
+    "gpt",
+    "bing-api",
+    "bing-search",
+    "gpt-3",
+    "openai-api",
+    "gpt-4",
+    "chatgpt",
+    "chatgpt-api",
+    "bing-chat"
+  ],
+  "dependencies": {
+    "@dqbd/tiktoken": "^1.0.2",
+    "@fastify/cors": "^8.2.0",
+    "@timefox/bic-sydney": "^1.1.2",
+    "@waylaidwanderer/fastify-sse-v2": "^3.1.0",
+    "@waylaidwanderer/fetch-event-source": "^3.0.1",
+    "boxen": "^7.0.1",
+    "clipboardy": "^3.0.0",
+    "dotenv": "^16.0.3",
+    "fastify": "^4.11.0",
+    "fetch-undici": "^3.0.1",
+    "https-proxy-agent": "^7.0.0",
+    "inquirer": "^9.1.4",
+    "inquirer-autocomplete-prompt": "^3.0.0",
+    "keyv": "^4.5.2",
+    "keyv-file": "^0.2.0",
+    "ora": "^7.0.1",
+    "undici": "^5.20.0",
+    "ws": "^8.12.0"
+  },
+  "devDependencies": {
+    "@keyv/redis": "^2.5.6",
+    "@types/node": "^20.11.17",
+    "eslint": "^8.35.0",
+    "eslint-config-airbnb-base": "^15.0.0",
+    "eslint-plugin-import": "^2.27.5",
+    "nodemon": "^3.0.1"
+  }
+}
