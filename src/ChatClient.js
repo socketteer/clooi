@@ -113,7 +113,7 @@ export default class ChatClient {
         conversation.messages = conversation.messages.concat(newConversationMessages);
         await this.conversationsCache.set(conversationId, conversation);
         return {
-            jailbreakConversationId: conversationId,
+            conversationId,
             messageId: conversation.messages[conversation.messages.length - 1].id,
             messages: conversation.messages,
         };
@@ -124,7 +124,7 @@ export default class ChatClient {
         return {
             text: conversationMessage.message,
             author,
-            type: conversationMessage.type || this.participants[author].defaultMessageType || 'message',
+            type: conversationMessage.type || this.participants[author]?.defaultMessageType || 'message',
         };
     }
 
@@ -203,6 +203,7 @@ export default class ChatClient {
             parentMessageId,
             role,
             message: message.text,
+            ...(message.type ? { type: message.type } : {}),
             ...(message.details ? { details: message.details } : {}),
         };
     }

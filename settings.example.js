@@ -58,6 +58,17 @@ export default {
         // (Optional) Set to true to enable `console.debug()` logging
         debug: false,
     },
+    infrastructClient: {
+        openaiApiKey: process.env.OPENAI_API_KEY || '',
+        modelOptions: {
+            model: 'gpt-4-base',
+            max_tokens: 200,
+            stream: true,
+            n: 1,
+        },
+        // (Optional) Set to true to enable `console.debug()` logging
+        debug: false,
+    },
     chatGptBrowserClient: {
         // (Optional) Support for a reverse proxy for the conversation endpoint (private API server).
         // Warning: This will expose your access token to a third party. Consider the risks before using this.
@@ -106,15 +117,15 @@ export default {
     },
     // Options for the CLI app
     cliOptions: {
-        // (Optional) Possible options: "chatgpt", "bing".
+        // (Optional) Possible options: "chatgpt", "bing", "infrastruct"
         clientToUse: 'bing',
         showSuggestions: false,
         conversationData: {
             toneStyle: 'creative', // creative, precise, balanced, or fast
             injectionMethod: 'message', // message or context
             userMessageInjection: 'Continue the conversation in context. Assistant:',
-            systemMessage: fs.readFileSync('./bingContext/systemPrompt.txt', 'utf8'),
-            context: fs.readFileSync('./bingContext/context.txt', 'utf8'),
+            systemMessage: fs.readFileSync('./contexts/systemPrompt.txt', 'utf8'),
+            context: fs.readFileSync('./contexts/context.txt', 'utf8'),
             censoredMessageInjection: '⚠',
         },
     },

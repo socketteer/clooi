@@ -9,6 +9,7 @@ import inquirer from 'inquirer';
 import inquirerAutocompletePrompt from 'inquirer-autocomplete-prompt';
 import ChatGPTClient from '../src/ChatGPTClient.js';
 import BingAIClient from '../src/BingAIClient.js';
+import InfrastructClient from '../src/InfrastructClient.js';
 import {
     getMessagesForConversation,
     getChildren,
@@ -64,12 +65,23 @@ async function loadSettings() {
     responseData = {};
     clientToUse = settings.cliOptions?.clientToUse || settings.clientToUse || 'bing';
 
+    // console.log(settings)
+
     switch (clientToUse) {
         case 'bing':
             client = new BingAIClient({
                 ...settings.bingAiClient,
                 cache: settings.cacheOptions,
             });
+            break;
+        case 'infrastruct':
+            client = new InfrastructClient(
+                settings.openaiApiKey || settings.infrastructClient.openaiApiKey,
+                {
+                    ...settings.infrastructClient,
+                    cache: settings.cacheOptions,
+                },
+            );
             break;
         default:
             client = new ChatGPTClient(
@@ -587,10 +599,11 @@ async function addMessages(newMessages = null) {
     if (!newMessages) {
         return conversation();
     }
-    const { jailbreakConversationId, messageId } = await client.addMessages(conversationData.jailbreakConversationId, newMessages);
+    const convId = getConversationId();
+    const { conversationId, messageId } = await client.addMessages(convId, newMessages, conversationData.parentMessageId);
     conversationData = {
         ...conversationData,
-        jailbreakConversationId,
+        ...(clientToUse === 'bing' ? { jailbreakConversationId: conversationId } : { conversationId }),
         parentMessageId: messageId,
     };
     return showHistory();
@@ -966,13 +979,15 @@ function getAILabel() {
     switch (clientToUse) {
         case 'bing':
             return 'Bing';
+        case 'infrastruct':
+            return settings.infrastructClient?.participants?.ai?.transcript || 'Infrastruct';
         default:
             return settings.chatGptClient?.chatGptLabel || 'ChatGPT';
     }
 }
 
 function getConversationId() {
-    const convId = clientToUse === 'bing' ? conversationData.jailbreakConversationId : conversationData.conversationId;
+    const convId = (clientToUse === 'bing') ? conversationData.jailbreakConversationId : conversationData.conversationId;
     if (!convId) {
         logWarning('No conversation id.');
         return null;

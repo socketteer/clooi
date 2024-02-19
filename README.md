@@ -260,7 +260,7 @@ You can also enter commands (prepended with `!`). Entering `!` will show the lis
 - `clientToUse`: The API client to use. 
     - `'bing'`: Use the BingAIClient
     - `'chatgpt'`: Use the chatGPT API client (Not yet tested)
-    - `'infrastruct'`: Use the Infrastruct client (Not yet implemented)
+    - `'infrastruct'`: Use the Infrastruct client
 - `showSuggestions`: Whether to show user suggestions after Bing messages.
 - `conversationData`: Dictionary of options to configure Client request
 
@@ -268,7 +268,7 @@ You can also enter commands (prepended with `!`). Entering `!` will show the lis
 
 The default options for the CLI app are stored in `settings.js`, under `cliOptions`. You can change the default options by modifying this file. These options will load by default when you run the CLI app or when you run the `!reload` command.
 
-The default system prompt and context are stored in `bingContext/systemPrompt.txt` and `bingContext/context.txt` respectively. You can change these files to change the default system prompt and context, or set different strings or point to different files in `settings.js`.
+The default system prompt and context are stored in `contexts/systemPrompt.txt` and `contexts/context.txt` respectively. You can change these files to change the default system prompt and context, or set different strings or point to different files in `settings.js`.
 
 
 ### Problems
