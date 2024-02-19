@@ -134,6 +134,10 @@ let availableCommands = [
         available: async () => Boolean(conversationData.parentMessageId),
     },
     {
+        name: '!add - Add messages to the conversation',
+        value: '!add',
+    },
+    {
         name: '!rewind - Rewind conversation to a previous message',
         value: '!rewind',
         available: async () => Boolean(conversationData.parentMessageId),
@@ -236,14 +240,7 @@ async function conversation() {
     // The below is a hack to allow selecting items from the autocomplete menu while also being able to submit messages.
     // This basically simulates a hybrid between having `suggestOnly: false` and `suggestOnly: true`.
     await new Promise(resolve => setTimeout(resolve, 0));
-    // prompt.ui.activePrompt.opt.source = (answers, input) => {
-    //     if (!input) {
-    //         return [];
-    //     }
-    //     prompt.ui.activePrompt.opt.suggestOnly = !input.startsWith('!') || input.split(' ').length > 1;
-    //     // return availableCommands.filter(command => command.value.startsWith(input));
-    //     return availableCommands.filter(command => (command.available ? await command.available() : true) && command.value.startsWith(input));
-    // };
+
     prompt.ui.activePrompt.opt.source = async (answers, input) => {
         if (!input) {
             return [];
@@ -278,6 +275,8 @@ async function conversation() {
                     return saveConversationState(args[1]);
                 case '!child':
                     return selectChildMessage(parseInt(args[1], 10));
+                case '!add':
+                    return addMessages(args.slice(1).join(' '));
                 case '!alt':
                     return selectSiblingMessage(parseInt(args[1], 10));
                 case '!print':
@@ -299,6 +298,8 @@ async function conversation() {
                 return onMessage('');
             case '!retry':
                 return retryResponse();
+            case '!add':
+                return addMessages();
             case '!rewind':
                 return rewindPrompt();
             case '!child':
@@ -358,7 +359,6 @@ async function onMessage(message) {
         // abort on ctrl+c
         process.on('SIGINT', () => {
             controller.abort();
-            throw new Error('Aborted');
             // process.exit(0);
         });
 
@@ -559,15 +559,33 @@ async function selectSiblingMessage(index = null) {
 }
 
 async function debug() {
-    // const conversationId = clientToUse === 'bing' ? conversationData.jailbreakConversationId : conversationData.conversationId;
-    // if (!conversationId) {
-    //     logWarning('No conversation id.');
-    //     return conversation();
-    // }
-    // const { messages } = await client.conversationsCache.get(conversationId);
-    // const childMessages = messages.filter(message => message.parentMessageId === conversationData.parentMessageId);
-    // console.log(JSON.stringify(childMessages, null, 2));
+    console.log(client.getDataType(await getHistory()));
     return conversation();
+}
+
+async function addMessages(newMessages = null) {
+    if (!newMessages) {
+        const { message } = await inquirer.prompt([
+            {
+                type: 'editor',
+                name: 'message',
+                message: 'Write a message:',
+                waitUserInput: false,
+            },
+        ]);
+        console.log(message);
+        newMessages = message.trim();
+    }
+    if (!newMessages) {
+        return conversation();
+    }
+    const { jailbreakConversationId, messageId } = await client.addMessages(conversationData.jailbreakConversationId, newMessages);
+    conversationData = {
+        ...conversationData,
+        jailbreakConversationId,
+        parentMessageId: messageId,
+    };
+    return showHistory();
 }
 
 async function useEditor() {
@@ -701,30 +719,12 @@ async function deleteAllConversations() {
     return conversation();
 }
 
-// async function copyConversation() {
-//     const messageHistory = await getHistory();
-
-//     if (!messageHistory) {
-//         return conversation();
-//     }
-
-//     const conversationString = client.getHistoryString(messageHistory);
-
-//     try {
-//         await clipboard.write(`${conversationString}\n\n----\nMade with ChatGPT CLI: <https://github.com/waylaidwanderer/node-chatgpt-api>`);
-//         logSuccess('Copied conversation to clipboard.');
-//     } catch (error) {
-//         logError(error?.message || error);
-//     }
-//     return conversation();
-// }
-
 async function getConversationHistoryString() {
     const messageHistory = await getHistory();
     if (!messageHistory) {
         return null;
     }
-    return client.getHistoryString(messageHistory);
+    return client.toTranscript(messageHistory);
 }
 
 async function printOrCopyData(action, type = null) {

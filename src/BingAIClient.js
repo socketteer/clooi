@@ -248,6 +248,7 @@ export default class BingAIClient extends ChatClient {
             jailbreakConversationId = false, // set to `true` for the first message to enable jailbreak mode
             conversationId,
             encryptedConversationSignature,
+            systemMessage,
             clientId,
             onProgress,
             parentMessageId = jailbreakConversationId === true
@@ -259,7 +260,6 @@ export default class BingAIClient extends ChatClient {
         const {
             toneStyle = 'creative', // or creative, precise, fast
             invocationId = 0,
-            systemMessage,
             context,
             abortController = new AbortController(),
             stopToken = '\n\n[user](#message)',
@@ -269,10 +269,6 @@ export default class BingAIClient extends ChatClient {
 
         if (typeof onProgress !== 'function') {
             onProgress = () => {};
-        }
-
-        if (typeof appendMessages === 'string') {
-            appendMessages = this.parseHistoryString(appendMessages);
         }
 
         if (
@@ -320,6 +316,15 @@ export default class BingAIClient extends ChatClient {
 
         const conversationKey = jailbreakConversationId;
 
+        if (appendMessages.length) {
+            const { messageId } = await this.addMessages(
+                conversationKey,
+                appendMessages,
+                parentMessageId,
+            );
+            parentMessageId = messageId;
+        }
+
         let userMessage;
 
         if (message) {
@@ -345,21 +350,21 @@ export default class BingAIClient extends ChatClient {
                 parentMessageId,
             ).map(msg => this.toBasicMessage(msg));
 
-            const previousMessages =
-                invocationId === 0
-                    ? [
-                          {
-                              text: systemMessage || janusJailbreak,
-                              author: 'system',
-                              type: 'additional_instructions',
-                          },
-                          ...previousCachedMessages,
-                          ...appendMessages,
-                      ]
-                    : undefined;
-            // if (userMessage && injectionMethod === 'context') {
-            //     previousMessages.push(userMessage);
-            // }
+            if (typeof systemMessage === 'string' && systemMessage.length) {
+                systemMessage = {
+                    text: systemMessage,
+                    author: 'system',
+                    type: 'additional_instructions',
+                };
+            } else if (!systemMessage) {
+                systemMessage = null;
+            }
+
+            const previousMessages = invocationId === 0 ? [
+                ...systemMessage ? [systemMessage] : [],
+                ...previousCachedMessages,
+            ] : undefined;
+
             if (userMessage) {
                 previousMessages.push(userMessage);
             }
@@ -375,11 +380,7 @@ export default class BingAIClient extends ChatClient {
                     if (lastUserMessageIndex !== -1) {
                         contextInjectMessages = previousMessages.slice(0, lastUserMessageIndex + 1);
                         userInjectMessages = previousMessages.slice(lastUserMessageIndex + 1);
-                        // console.log('injectMessages:', contextInjectMessages);
                         lastUserMessage = contextInjectMessages.pop();
-                        // console.log('lastUserMessage:', lastUserMessage);
-                        // console.log('userInjectMessages:', userInjectMessages);
-
                         userMessageInjection = [lastUserMessage.text, userInjectMessages
                             ?.map(msg => this.toTranscriptMessage(msg))
                             .join('\n\n')].join('\n\n').trim();
@@ -395,27 +396,14 @@ export default class BingAIClient extends ChatClient {
             }
 
             // prepare messages for prompt injection
-            contextInjectionString = contextInjectMessages
-                ?.map(msg => this.toTranscriptMessage(msg))
-                .join('\n\n');
+            contextInjectionString = this.toTranscript(contextInjectMessages);
+            // contextInjectionString = contextInjectMessages
+            //     ?.map(msg => this.toTranscriptMessage(msg))
+            //     .join('\n\n');
 
             if (context) {
                 contextInjectionString = `${context}\n\n${contextInjectionString}`;
             }
-
-            // console.log('contextInjectionString:', contextInjectionString);
-            // console.log('userMessageInjection:', userMessageInjection);
-            // console.log('injectionMethod:', injectionMethod);
-        }
-
-        let newConversationMessages = [];
-
-        if (appendMessages.length) {
-            newConversationMessages = this.createConversationMessages(
-                appendMessages,
-                parentMessageId,
-            );
-            parentMessageId = newConversationMessages.slice(-1)[0].id;
         }
 
         let userConversationMessage;
@@ -424,17 +412,10 @@ export default class BingAIClient extends ChatClient {
                 userMessage,
                 parentMessageId,
             );
-
-            newConversationMessages.push(userConversationMessage);
-        }
-
-        if (jailbreakConversationId) {
-            conversation.messages = [
-                ...conversation.messages,
-                ...newConversationMessages,
-            ];
-
-            // await this.conversationsCache.set(conversationKey, conversation);
+            if (jailbreakConversationId) {
+                conversation.messages.push(userConversationMessage);
+                // await this.conversationsCache.set(conversationKey, conversation);
+            }
         }
 
         const ws = await this.createWebSocketConnection(
@@ -526,10 +507,6 @@ export default class BingAIClient extends ChatClient {
                 messageId: 'discover-web--page-ping-mriduna-----',
             });
         }
-
-        // if (this.debug) {
-        //     console.debug(obj.arguments[0].previousMessages);
-        // }
 
         if (obj.arguments[0].previousMessages.length === 0) {
             delete obj.arguments[0].previousMessages;

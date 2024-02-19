@@ -220,6 +220,8 @@ You can also enter commands (prepended with `!`). Entering `!` will show the lis
 - `!new`: Start new conversation
 - `!gen`: Generate a response (without sending a user message)
 - `!retry`: Regenerate the last response
+- `!add [MESSAGE]`: Add a message to the conversation without triggering a response.
+    - `[MESSAGE]`: the message to add. If not provided, shows a prompt to enter a message or message history transcript.
 - `!rewind [INDEX]`: Rewind conversation to a previous message. 
     - `[INDEX]`: index of the message to rewind to (if positive), or the number of messages to rewind (if negative). If not provided, shows a prompt to select a message to rewind to.
 - `!child [INDEX]`: Navigate to a child message. 
