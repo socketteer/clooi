@@ -207,4 +207,4 @@ test.js
 *.cast
 cache.json
 
-local/
+.local/
