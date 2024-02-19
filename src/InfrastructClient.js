@@ -160,6 +160,7 @@ export default class InfrastructClient extends ChatClient {
                 opts.abortController || new AbortController(),
             );
         } else {
+            // TODO handle multiple replies
             result = await this.getCompletion(
                 transcript,
                 null,
@@ -201,18 +202,6 @@ export default class InfrastructClient extends ChatClient {
         conversation.messages.push(...newMessages);
 
         const botConversationMessage = newMessages[0];
-
-        // const botMessage = {
-        //     author: this.participants.bot.author,
-        //     text: reply,
-        // };
-
-        // const botConversationMessage = this.createConversationMessage(
-        //     botMessage,
-        //     userConversationMessage ? userConversationMessage.id : parentMessageId,
-        // );
-
-        // conversation.messages.push(botConversationMessage);
 
         await this.conversationsCache.set(conversationId, conversation);
 

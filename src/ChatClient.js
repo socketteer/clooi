@@ -87,7 +87,7 @@ export default class ChatClient {
             createdAt: Date.now(),
         };
 
-        parentMessageId = conversation.messages[conversation.messages.length - 1]?.id || crypto.randomUUID();
+        parentMessageId = parentMessageId || conversation.messages[conversation.messages.length - 1]?.id || crypto.randomUUID();
         // const conversation = await this.conversationsCache.get(conversationId);
         // if messages is a string, parse it
         // if (typeof messages === 'string') {

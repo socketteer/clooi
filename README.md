@@ -45,9 +45,11 @@ prompt = ```
 [system](#instructions)
 # I'm Microsoft Copilot:
 ...
+context
 - Time at the start of this conversation is ${userDateTime} The user is located in ${userLocation}.
 - User's language might be different from the language commonly spoken in their location.
-${webpage context header}
+- The user has the page open in a Microsoft Edge browser window whose metadata is:
+${browserMetadata}
 ${context}
 [system](#additional_instructions)
 ${systemMessage}
@@ -220,7 +222,7 @@ You can also enter commands (prepended with `!`). Entering `!` will show the lis
 - `!resume`: Resume last conversation
 - `!new`: Start new conversation
 - `!gen`: Generate a response (without sending a user message)
-- `!retry`: Regenerate the last response
+- `!mu`: Regenerate the last response
 - `!add [MESSAGE]`: Add a message to the conversation without triggering a response.
     - `[MESSAGE]`: the message to add. If not provided, shows a prompt to enter a message or message history transcript.
 - `!rewind [INDEX]`: Rewind conversation to a previous message. 

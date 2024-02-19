@@ -141,8 +141,8 @@ let availableCommands = [
         value: '!gen',
     },
     {
-        name: '!retry - Regenerate the last response',
-        value: '!retry',
+        name: '!mu - Regenerate the last response',
+        value: '!mu',
         available: async () => Boolean(conversationData.parentMessageId),
     },
     {
@@ -314,7 +314,7 @@ async function conversation() {
                 return newConversation();
             case '!gen':
                 return onMessage('');
-            case '!retry':
+            case '!mu':
                 return retryResponse();
             case '!add':
                 return addMessages();
@@ -579,7 +579,9 @@ async function selectSiblingMessage(index = null) {
 }
 
 async function debug() {
-    console.log(client.getDataType(await getHistory()));
+    // console.log(client.getDataType(await getHistory()));
+    const currentMessage = await getCurrentMessage();
+    console.log(Object.keys(BingAIClient.getSearchResults(currentMessage)));
     return conversation();
 }
 

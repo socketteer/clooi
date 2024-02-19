@@ -567,19 +567,19 @@ export default class BingAIClient extends ChatClient {
                         }
                         if (messages[0]?.contentType === 'IMAGE') {
                             // You will never get a message of this type without 'gencontentv3' being on.
-                            bicIframe = this.bic
-                                .genImageIframeSsr(
-                                    messages[0].text,
-                                    messages[0].messageId,
-                                    progress => (progress?.contentIframe
-                                        ? onProgress(progress?.contentIframe, messages[0])
-                                        : null),
-                                )
-                                .catch((error) => {
-                                    onProgress(error.message);
-                                    bicIframe.isError = true;
-                                    return error.message;
-                                });
+                            // bicIframe = this.bic
+                            //     .genImageIframeSsr(
+                            //         messages[0].text,
+                            //         messages[0].messageId,
+                            //         progress => (progress?.contentIframe
+                            //             ? onProgress(progress?.contentIframe, messages[0])
+                            //             : null),
+                            //     )
+                            //     .catch((error) => {
+                            //         onProgress(error.message);
+                            //         bicIframe.isError = true;
+                            //         return error.message;
+                            //     });
                             return;
                         }
                         const updatedText = messages[0].text;
