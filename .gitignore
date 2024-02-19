@@ -201,7 +201,7 @@ dist
 .pnp.*
 
 # node-chatgpt-api
-# settings.js
+settings.js
 test.js
 *.test.js
 *.cast

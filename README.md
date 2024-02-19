@@ -9,6 +9,7 @@
 
 1. Clone this repository: `git clone https://github.com/socketteer/bingleton-api`
 2. Install dependencies with `npm install`
+3. Rename `settings.example.js` to `settings.js` in the root directory and change the settings where required.
 
 ## BingAIClient
 
@@ -268,4 +269,4 @@ The default system prompt and context are stored in `bingContext/systemPrompt.tx
 
 ### Problems
 
-- reloading settings doesn't update settings
+- reloading settings doesn't update settings if files have changed. If you want to load new settings, you need to restart the app. (`!exit` and then `npm run cli`, then `!resume` to continue the conversation)
