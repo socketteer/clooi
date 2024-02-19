@@ -238,6 +238,10 @@ You can also enter commands (prepended with `!`). Entering `!` will show the lis
 - `!print [TYPE]`: Print data to console.
     - `[TYPE]`: type of data to print. If not provided, shows a prompt to select the type of data to print.
 - `!history`: Show conversation history in console
+- `!set [OPTION] [VALUE]`: Set an option
+    - `[OPTION]`: option to set
+    - `[VALUE]`: value to set the option to
+    - If not provided, shows a prompt to select an option to set.
 - `!save [NAME]`: Save conversation state. 
     - `[NAME]`: name to save the conversation state with. If not provided, shows a prompt to enter a name.
 - `!load [NAME]`: Load conversation state.
