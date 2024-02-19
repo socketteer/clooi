@@ -202,6 +202,10 @@ let availableCommands = [
         value: '!reload',
     },
     {
+        name: '!set - Set a conversation data property',
+        value: '!set',
+    },
+    {
         name: '!delete-all - Delete all conversations',
         value: '!delete-all',
         available: async () => clientToUse === 'chatgpt',
@@ -283,6 +287,8 @@ async function conversation() {
                     return printOrCopyData('print', args[1]);
                 case '!copy':
                     return printOrCopyData('copy', args[1]);
+                case '!set':
+                    return setConversationData(args[1], args.slice(2).join(' '));
                 default:
                     return conversation();
             }
@@ -326,6 +332,8 @@ async function conversation() {
                 return loadSavedState();
             case '!reload':
                 return loadSettings();
+            case '!set':
+                return setConversationData();
             case '!delete-all':
                 return deleteAllConversations();
             case '!exit':
@@ -573,7 +581,7 @@ async function addMessages(newMessages = null) {
                 waitUserInput: false,
             },
         ]);
-        console.log(message);
+        // console.log(message);
         newMessages = message.trim();
     }
     if (!newMessages) {
@@ -585,6 +593,42 @@ async function addMessages(newMessages = null) {
         jailbreakConversationId,
         parentMessageId: messageId,
     };
+    return showHistory();
+}
+
+async function setConversationData(key = null, value = null) {
+    if (!key) {
+        const { conversationKey } = await inquirer.prompt([
+            {
+                type: 'list',
+                name: 'conversationKey',
+                message: 'Select a key:',
+                choices: Object.keys(conversationData),
+            },
+        ]);
+        key = conversationKey;
+    }
+    if (!key) {
+        logWarning('No key.');
+        return conversation();
+    }
+    if (!value) {
+        const { conversationValue } = await inquirer.prompt([
+            {
+                type: 'editor',
+                name: 'conversationValue',
+                message: 'Enter a value:',
+                waitUserInput: false,
+            },
+        ]);
+        value = conversationValue;
+    }
+    if (!value) {
+        logWarning('No value.');
+        // return conversation();
+    }
+    conversationData[key] = value;
+    logSuccess(`Set ${key} to ${value}.`);
     return showHistory();
 }
 
