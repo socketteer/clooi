@@ -183,8 +183,7 @@ export default class InfrastructClient extends ChatClient {
 
         reply = reply.trim();
 
-        console.log('replies:', replies);
-
+        // console.log('replies:', replies);
 
         parentMessageId = userConversationMessage ? userConversationMessage.id : parentMessageId;
         // create messages for each reply

@@ -60,6 +60,7 @@ ${message}
 [assistant](#message)
 ```
 
+(as of 2024-020-19, verified by Bing)
 
 ## API
 
@@ -231,10 +232,10 @@ You can also enter commands (prepended with `!`). Entering `!` will show the lis
     - `[INDEX]`: index of the child message to navigate to. (default: 0)
 - `!alt [INDEX]`: Navigate to an alternate message. 
     - `[INDEX]`: index of the alternate (sibling) message to navigate to. If not provided, shows a prompt to select an alternate message.
-- `!up`: Navigate to the parent message
-- `!down`: Navigate to the first child message
-- `!right`: Navigate to the next sibling message
-- `!left`: Navigate to the previous sibling message
+- `!w`: Navigate to the parent message
+- `!s`: Navigate to the first child message
+- `!d`: Navigate to the next sibling message
+- `!a`: Navigate to the previous sibling message
 - `!copy [TYPE]`: Copy data to clipboard. 
     - `[TYPE]`: type of data to copy. If not provided, shows a prompt to select the type of data to copy.
 - `!print [TYPE]`: Print data to console.
@@ -271,6 +272,8 @@ You can also enter commands (prepended with `!`). Entering `!` will show the lis
 The default options for the CLI app are stored in `settings.js`, under `cliOptions`. You can change the default options by modifying this file. These options will load by default when you run the CLI app or when you run the `!reload` command.
 
 The default system prompt and context are stored in `contexts/systemPrompt.txt` and `contexts/context.txt` respectively. You can change these files to change the default system prompt and context, or set different strings or point to different files in `settings.js`.
+
+Note: For infrastruct or ChatGPT, most of the generation options are set in the same way as in the API, in `modelOptions` in the respective client's options in `settinsg.js`.
 
 
 ### Problems

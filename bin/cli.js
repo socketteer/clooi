@@ -165,23 +165,23 @@ let availableCommands = [
         available: hasSiblings,
     },
     {
-        name: '!up - Navigate to the parent message',
-        value: '!up',
+        name: '!w (up) - Navigate to the parent message',
+        value: '!w',
         available: async () => Boolean(conversationData.parentMessageId),
     },
     {
-        name: '!down - Navigate to the first child message',
-        value: '!down',
+        name: '!s (down) - Navigate to the first child message',
+        value: '!s',
         available: hasChildren,
     },
     {
-        name: '!right - Navigate to the next sibling message',
-        value: '!right',
+        name: '!d (right) - Navigate to the next sibling message',
+        value: '!d',
         available: hasSiblings,
     },
     {
-        name: '!left - Navigate to the previous sibling message',
-        value: '!left',
+        name: '!a (left) - Navigate to the previous sibling message',
+        value: '!a',
         available: hasSiblings,
     },
     {
@@ -324,13 +324,13 @@ async function conversation() {
                 return selectChildMessage();
             case '!alt':
                 return selectSiblingMessage();
-            case '!up':
+            case '!w':
                 return rewindTo(-1);
-            case '!down':
+            case '!s':
                 return selectChildMessage(0);
-            case '!right':
+            case '!d':
                 return selectSiblingMessage(getSiblingIndex(messages, conversationData.parentMessageId) + 1);
-            case '!left':
+            case '!a':
                 return selectSiblingMessage(getSiblingIndex(messages, conversationData.parentMessageId) - 1);
             case '!copy':
                 return printOrCopyData('copy');// return copyConversation();
@@ -566,7 +566,7 @@ async function selectSiblingMessage(index = null) {
                 choices,
                 loop: true,
                 default: getSiblingIndex(messages, conversationData.parentMessageId),
-                // pageSize: 10,
+                pageSize: Math.min(siblingMessages.length * 2, 30),
             },
         ]);
         index = idx;
@@ -923,7 +923,7 @@ function conversationMessageBox(conversationMessage, messages, index = null) {
     const siblingIndex = getSiblingIndex(messages, conversationMessage.id);
     const aiMessage = Boolean(conversationMessage.role === getAILabel());
     const indexString = index !== null ? `[${index}] ` : '';
-    const childrenString = children.length > 0 ? ` ── !child ` + children.map((child, idx) => `[${idx}]`).join(' ') : '';
+    const childrenString = children.length > 0 ? ` ── !child ` + children.map((child, idx) => `${idx}`).join(' ') : '';
     const siblingsString = siblings.length > 1 ? ` ── !alt ` + siblings.map((sibling, idx) => { 
         return idx === siblingIndex ? `[${idx}]` : `${idx}`;
     }).join(' ') : '';
