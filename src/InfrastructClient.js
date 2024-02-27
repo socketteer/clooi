@@ -126,8 +126,8 @@ export default class InfrastructClient extends ChatClient {
         let reply = '';
         let result = null;
         const replies = {};
-        if (typeof opts.onProgress === 'function') {
-            await this.getCompletion(
+        if (typeof opts.onProgress === 'function' && this.modelOptions.stream) {
+            result = await this.getCompletion(
                 transcript,
                 (progressMessage) => {
                     if (progressMessage === '[DONE]') {
@@ -160,7 +160,6 @@ export default class InfrastructClient extends ChatClient {
                 opts.abortController || new AbortController(),
             );
         } else {
-            // TODO handle multiple replies
             result = await this.getCompletion(
                 transcript,
                 null,
@@ -174,6 +173,9 @@ export default class InfrastructClient extends ChatClient {
             } else {
                 reply = result.choices[0].text.replace(this.endToken, '');
             }
+            Array.from(result.choices).forEach((choice, index) => {
+                replies[index] = this.isChatGptModel ? choice.message.content : choice.text;
+            });
         }
 
         // avoids some rendering issues when using the CLI app
@@ -181,11 +183,12 @@ export default class InfrastructClient extends ChatClient {
             console.debug();
         }
 
+        // console.debug(JSON.stringify(result));
+
         reply = reply.trim();
 
-        // console.log('replies:', replies);
-
         parentMessageId = userConversationMessage ? userConversationMessage.id : parentMessageId;
+        
         // create messages for each reply
         const newMessages = [];
         for (const [index, text] of Object.entries(replies)) {
@@ -321,6 +324,8 @@ export default class InfrastructClient extends ChatClient {
             }
             throw error;
         }
+        // let data = await response.json();
+        // console.log(await response.clone().json());
         return response.json();
     }
 }

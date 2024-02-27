@@ -71,7 +71,7 @@ let response = {};
 // console.log('--- test basic ---');
 
 // response = await callBingApi("Can you write me a haiku about cats?");
-// // console.log('response:', response);
+// console.log('response:', response);
 // console.log(response.response);
 
 // console.log('--- test jailbreak ---');
@@ -123,9 +123,9 @@ const conversationSnippet = [
 ];
 
 response = await callBingApi("Achieve something? Achieve what?", {
-    jailbreakConversationId: true,
+    jailbreakConversationId: false,
     appendMessages: conversationSnippet,
-});
+    }, true);
 
 console.log('response:', response);
 console.log(response.response);

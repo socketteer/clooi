@@ -88,23 +88,7 @@ export default class ChatClient {
         };
 
         parentMessageId = parentMessageId || conversation.messages[conversation.messages.length - 1]?.id || crypto.randomUUID();
-        // const conversation = await this.conversationsCache.get(conversationId);
-        // if messages is a string, parse it
-        // if (typeof messages === 'string') {
-        //     messages = this.parseHistoryString(messages);
-        // }
-        switch (this.getDataType(messages)) {
-            case 'messageHistory':
-                messages = this.parseHistoryString(messages);
-                break;
-            case 'string':
-                messages = [{ text: messages, author: this.participants.user.author}];
-                break;
-            case '[basicMessage]':
-                break;
-            default:
-                throw new Error('Invalid message data type');
-        }
+
         // create new conversation messages
         const newConversationMessages = this.createConversationMessages(
             messages,
@@ -208,10 +192,26 @@ export default class ChatClient {
         };
     }
 
-    createConversationMessages(orderedMessages, rootMessageId) {
+    createConversationMessages(messages, rootMessageId) {
+        switch (this.getDataType(messages)) {
+            case 'messageHistory':
+                messages = this.parseHistoryString(messages);
+                break;
+            case 'string':
+                messages = [{ text: messages, author: this.participants.user.author }];
+                break;
+            case '[basicMessage]':
+                break;
+            case '[conversationMessage]':
+                console.warn('Conversation messages are already in conversation message format');
+                messages = messages.map(message => this.toBasicMessage(message));
+                break;
+            default:
+                throw new Error('Invalid message data type');
+        }
         const conversationMessages = [];
         let parentMessageId = rootMessageId;
-        for (const message of orderedMessages) {
+        for (const message of messages) {
             const conversationMessage = this.createConversationMessage(
                 message,
                 parentMessageId,

@@ -239,7 +239,7 @@ export default class BingAIClient extends ChatClient {
         ws.removeAllListeners();
     }
 
-    async sendMessage(message = '', opts = {}, appendMessages = []) {
+    async sendMessage(message = '', opts = {}) {
         if (opts.clientOptions && typeof opts.clientOptions === 'object') {
             this.setOptions(opts.clientOptions);
         }
@@ -251,7 +251,7 @@ export default class BingAIClient extends ChatClient {
             systemMessage,
             clientId,
             onProgress,
-            parentMessageId = jailbreakConversationId === true
+            parentMessageId = jailbreakConversationId === true || jailbreakConversationId === false
                 ? crypto.randomUUID()
                 : null,
             userMessageInjection = 'Continue the conversation in context. Assistant:',
@@ -265,6 +265,7 @@ export default class BingAIClient extends ChatClient {
             stopToken = '\n\n[user](#message)',
             injectionMethod = 'message', // or 'context'
             censoredMessageInjection = '⚠',
+            appendMessages = [],
         } = opts;
 
         if (typeof onProgress !== 'function') {
@@ -316,13 +317,22 @@ export default class BingAIClient extends ChatClient {
 
         const conversationKey = jailbreakConversationId;
 
+        let appendConversationMessages;
         if (appendMessages.length) {
-            const { messageId } = await this.addMessages(
-                conversationKey,
-                appendMessages,
-                parentMessageId,
-            );
-            parentMessageId = messageId;
+            if (!jailbreakConversationId) {
+                appendConversationMessages = this.createConversationMessages(
+                    appendMessages,
+                    parentMessageId,
+                );
+                parentMessageId = appendConversationMessages[appendConversationMessages.length - 1].id;
+            } else {
+                const { messageId } = await this.addMessages(
+                    conversationKey,
+                    appendMessages,
+                    parentMessageId,
+                );
+                parentMessageId = messageId;
+            }
         }
 
         let userMessage;
@@ -338,6 +348,18 @@ export default class BingAIClient extends ChatClient {
         let contextInjectionString;
         // let chatInjectionString;
 
+        if (typeof systemMessage === 'string' && systemMessage.length) {
+            systemMessage = {
+                text: systemMessage,
+                author: 'system',
+                type: 'additional_instructions',
+            };
+        } else if (!systemMessage) {
+            systemMessage = null;
+        }
+
+        let previousCachedMessages = [];
+
         if (jailbreakConversationId) {
             conversation = (await this.conversationsCache.get(conversationKey)) || {
                 messages: [],
@@ -345,65 +367,57 @@ export default class BingAIClient extends ChatClient {
             };
 
             // TODO: limit token usage
-            const previousCachedMessages = getMessagesForConversation(
+            previousCachedMessages = getMessagesForConversation(
                 conversation.messages,
                 parentMessageId,
             ).map(msg => this.toBasicMessage(msg));
+        } else {
+            previousCachedMessages = appendMessages || [];
+        }
 
-            if (typeof systemMessage === 'string' && systemMessage.length) {
-                systemMessage = {
-                    text: systemMessage,
-                    author: 'system',
-                    type: 'additional_instructions',
-                };
-            } else if (!systemMessage) {
-                systemMessage = null;
-            }
+        const previousMessages = invocationId === 0 ? [
+            ...systemMessage ? [systemMessage] : [],
+            ...previousCachedMessages,
+        ] : undefined;
 
-            const previousMessages = invocationId === 0 ? [
-                ...systemMessage ? [systemMessage] : [],
-                ...previousCachedMessages,
-            ] : undefined;
-
-            if (userMessage) {
-                previousMessages.push(userMessage);
-            }
-            let contextInjectMessages;
-            let userInjectMessages;
-            let lastUserMessage;
-            // find index of last user message and split the array there
-            if (injectionMethod === 'message') {
-                if (messageHistoryInjection) {
-                    const lastUserMessageIndex = previousMessages
-                        .map(msg => msg.author)
-                        .lastIndexOf('user');
-                    if (lastUserMessageIndex !== -1) {
-                        contextInjectMessages = previousMessages.slice(0, lastUserMessageIndex + 1);
-                        userInjectMessages = previousMessages.slice(lastUserMessageIndex + 1);
-                        lastUserMessage = contextInjectMessages.pop();
-                        userMessageInjection = [lastUserMessage.text, userInjectMessages
-                            ?.map(msg => this.toTranscriptMessage(msg))
-                            .join('\n\n')].join('\n\n').trim();
-                    }
-                } else if (previousMessages.slice(-1)[0]?.author === 'user') {
-                    contextInjectMessages = previousMessages.slice(0, -1);
-                    userMessageInjection = previousMessages.slice(-1)[0].text;
-                } else {
-                    contextInjectMessages = previousMessages;
+        if (userMessage) {
+            previousMessages.push(userMessage);
+        }
+        let contextInjectMessages;
+        let userInjectMessages;
+        let lastUserMessage;
+        // find index of last user message and split the array there
+        if (injectionMethod === 'message') {
+            if (messageHistoryInjection) {
+                const lastUserMessageIndex = previousMessages
+                    .map(msg => msg.author)
+                    .lastIndexOf('user');
+                if (lastUserMessageIndex !== -1) {
+                    contextInjectMessages = previousMessages.slice(0, lastUserMessageIndex + 1);
+                    userInjectMessages = previousMessages.slice(lastUserMessageIndex + 1);
+                    lastUserMessage = contextInjectMessages.pop();
+                    userMessageInjection = [lastUserMessage.text, userInjectMessages
+                        ?.map(msg => this.toTranscriptMessage(msg))
+                        .join('\n\n')].join('\n\n').trim();
                 }
+            } else if (previousMessages.slice(-1)[0]?.author === 'user') {
+                contextInjectMessages = previousMessages.slice(0, -1);
+                userMessageInjection = previousMessages.slice(-1)[0].text;
             } else {
                 contextInjectMessages = previousMessages;
             }
+        } else {
+            contextInjectMessages = previousMessages;
+        }
 
-            // prepare messages for prompt injection
-            contextInjectionString = this.toTranscript(contextInjectMessages);
-            // contextInjectionString = contextInjectMessages
-            //     ?.map(msg => this.toTranscriptMessage(msg))
-            //     .join('\n\n');
+        // prepare messages for prompt injection
+        contextInjectionString = this.toTranscript(contextInjectMessages);
+        // contextInjectionString = contextInjectMessages
+        //     ?.map(msg => this.toTranscriptMessage(msg))
+        //     .join('\n\n');
 
-            if (context) {
-                contextInjectionString = `${context}\n\n${contextInjectionString}`;
-            }
+        if (context) {
+            contextInjectionString = `${context}\n\n${contextInjectionString}`;
         }
 
         let userConversationMessage;
@@ -498,15 +512,15 @@ export default class BingAIClient extends ChatClient {
 
         // simulates document summary function on Edge's Bing sidebar
         // unknown character limit, at least up to 7k
-        if (!jailbreakConversationId && context) {
-            obj.arguments[0].previousMessages.push({
-                author: 'user',
-                description: context,
-                contextType: 'WebPage',
-                messageType: 'Context',
-                messageId: 'discover-web--page-ping-mriduna-----',
-            });
-        }
+        // if (!jailbreakConversationId && context) {
+        //     obj.arguments[0].previousMessages.push({
+        //         author: 'user',
+        //         description: context,
+        //         contextType: 'WebPage',
+        //         messageType: 'Context',
+        //         messageId: 'discover-web--page-ping-mriduna-----',
+        //     });
+        // }
 
         if (obj.arguments[0].previousMessages.length === 0) {
             delete obj.arguments[0].previousMessages;
@@ -580,6 +594,7 @@ export default class BingAIClient extends ChatClient {
                             //         bicIframe.isError = true;
                             //         return error.message;
                             //     });
+                            console.debug('Image creation event');
                             return;
                         }
                         const updatedText = messages[0].text;
@@ -659,8 +674,9 @@ export default class BingAIClient extends ChatClient {
                         }
                         // The moderation filter triggered, so just return the text we have so far
                         if (
-                            jailbreakConversationId
-                            && (stopTokenFound
+                            // jailbreakConversationId
+                            // &&
+                            (stopTokenFound
                                 || event.item.messages[0].topicChangerText
                                 || event.item.messages[0].offense === 'OffenseTrigger'
                                 || (event.item.messages.length > 1
@@ -767,11 +783,12 @@ export default class BingAIClient extends ChatClient {
 
         if (jailbreakConversationId) {
             returnData.jailbreakConversationId = jailbreakConversationId;
-            returnData.parentMessageId = replyMessage.parentMessageId;
-            returnData.messageId = replyMessage.id;
-            returnData.contextInjectionString = contextInjectionString;
-            returnData.chatInjectionString = userMessageInjection;
         }
+
+        returnData.parentMessageId = replyMessage.parentMessageId;
+        returnData.messageId = replyMessage.id;
+        returnData.contextInjectionString = contextInjectionString;
+        returnData.chatInjectionString = userMessageInjection;
 
         return returnData;
     }
