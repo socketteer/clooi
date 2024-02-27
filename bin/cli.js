@@ -185,8 +185,8 @@ let availableCommands = [
         available: hasSiblings,
     },
     {
-        name: '!copy - Copy data to clipboard',
-        value: '!copy',
+        name: '!cp - Copy data to clipboard',
+        value: '!cp',
     },
     {
         name: '!print - Print data to console',
@@ -297,7 +297,7 @@ async function conversation() {
                     return selectSiblingMessage(parseInt(args[1], 10));
                 case '!print':
                     return printOrCopyData('print', args[1]);
-                case '!copy':
+                case '!cp':
                     return printOrCopyData('copy', args[1]);
                 case '!set':
                     return setConversationData(args[1], args.slice(2).join(' '));
@@ -332,7 +332,7 @@ async function conversation() {
                 return selectSiblingMessage(getSiblingIndex(messages, conversationData.parentMessageId) + 1);
             case '!a':
                 return selectSiblingMessage(getSiblingIndex(messages, conversationData.parentMessageId) - 1);
-            case '!copy':
+            case '!cp':
                 return printOrCopyData('copy');// return copyConversation();
             case '!print':
                 return printOrCopyData('print');
@@ -533,7 +533,7 @@ async function selectChildMessage(index = null) {
                 message: 'Select a child message:',
                 choices,
                 loop: true,
-                // pageSize: 10,
+                pageSize: Math.min(childMessages.length * 2, 30),
             },
         ]);
         index = idx;
