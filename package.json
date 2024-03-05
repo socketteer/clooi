@@ -40,6 +40,7 @@
     "bing-chat"
   ],
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.4.4",
     "@dqbd/tiktoken": "^1.0.2",
     "@fastify/cors": "^8.2.0",
     "@timefox/bic-sydney": "^1.1.2",
@@ -56,6 +57,7 @@
     "keyv": "^4.5.2",
     "keyv-file": "^0.2.0",
     "ora": "^7.0.1",
+    "typescript": "^5.3.3",
     "undici": "^5.20.0",
     "ws": "^8.12.0"
   },

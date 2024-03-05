@@ -122,13 +122,21 @@ export default class InfrastructClient extends ChatClient {
             this.modelOptions.stop = stopToken;
         }
 
+        const params = {
+            prompt: transcript,
+        };
+
+        const headers = {
+            Authorization: `Bearer ${this.apiKey}`,
+        };
 
         let reply = '';
         let result = null;
         const replies = {};
         if (typeof opts.onProgress === 'function' && this.modelOptions.stream) {
             result = await this.getCompletion(
-                transcript,
+                params,
+                headers,
                 (progressMessage) => {
                     if (progressMessage === '[DONE]') {
                         return;
@@ -217,115 +225,5 @@ export default class InfrastructClient extends ChatClient {
             details: result,
             replies: Object.values(replies),
         };
-    }
-
-    async getCompletion(prompt, onProgress, abortController = null) {
-        const debug = false;
-        const modelOptions = {
-            ...this.modelOptions,
-            prompt,
-        };
-        const opts = {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(modelOptions),
-            dispatcher: new Agent({
-                bodyTimeout: 0,
-                headersTimeout: 0,
-            }),
-        };
-        const url = this.completionsUrl;
-
-        opts.headers.Authorization = `Bearer ${this.apiKey}`;
-
-        if (modelOptions.stream) {
-            // eslint-disable-next-line no-async-promise-executor
-            return new Promise(async (resolve, reject) => {
-                try {
-                    let done = false;
-                    await fetchEventSource(url, {
-                        ...opts,
-                        signal: abortController.signal,
-                        async onopen(response) {
-                            if (response.status === 200) {
-                                return;
-                            }
-                            if (debug) {
-                                console.debug(response);
-                            }
-                            let error;
-                            try {
-                                const body = await response.text();
-                                error = new Error(`Failed to send message. HTTP ${response.status} - ${body}`);
-                                error.status = response.status;
-                                error.json = JSON.parse(body);
-                            } catch {
-                                error = error || new Error(`Failed to send message. HTTP ${response.status}`);
-                            }
-                            throw error;
-                        },
-                        onclose() {
-                            if (debug) {
-                                console.debug('Server closed the connection unexpectedly, returning...');
-                            }
-                            // workaround for private API not sending [DONE] event
-                            if (!done) {
-                                onProgress('[DONE]');
-                                abortController.abort();
-                                resolve();
-                            }
-                        },
-                        onerror(err) {
-                            if (debug) {
-                                console.debug(err);
-                            }
-                            // rethrow to stop the operation
-                            throw err;
-                        },
-                        onmessage(message) {
-                            if (debug) {
-                                console.debug(message);
-                            }
-                            if (!message.data || message.event === 'ping') {
-                                return;
-                            }
-                            if (message.data === '[DONE]') {
-                                onProgress('[DONE]');
-                                abortController.abort();
-                                resolve();
-                                done = true;
-                                return;
-                            }
-                            onProgress(JSON.parse(message.data));
-                        },
-                    });
-                } catch (err) {
-                    reject(err);
-                }
-            });
-        }
-        const response = await fetch(
-            url,
-            {
-                ...opts,
-                signal: abortController.signal,
-            },
-        );
-        if (response.status !== 200) {
-            const body = await response.text();
-            const error = new Error(`Failed to send message. HTTP ${response.status} - ${body}`);
-            error.status = response.status;
-            try {
-                error.json = JSON.parse(body);
-            } catch {
-                error.body = body;
-            }
-            throw error;
-        }
-        // let data = await response.json();
-        // console.log(await response.clone().json());
-        return response.json();
     }
 }

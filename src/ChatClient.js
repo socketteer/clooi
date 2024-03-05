@@ -1,4 +1,6 @@
 import Keyv from 'keyv';
+import { fetchEventSource } from '@waylaidwanderer/fetch-event-source';
+import { Agent } from 'undici';
 
 const defaultParticipants = {
     user: {
@@ -75,6 +77,118 @@ export default class ChatClient {
 
     async sendMessage() {
         throw new Error('Not implemented');
+    }
+
+    async getCompletion(params, headers, onProgress, abortController, debug = false) {
+        const modelOptions = {
+            ...this.modelOptions,
+            ...params,
+            stream: true,
+
+        };
+        const opts = {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                ...headers,
+            },
+            body: JSON.stringify(modelOptions),
+            dispatcher: new Agent({
+                bodyTimeout: 0,
+                headersTimeout: 0,
+            }),
+        };
+        const url = this.completionsUrl;
+
+        // opts.headers['x-api-key'] = this.apiKey;
+        // opts.headers['anthropic-version'] = '2023-06-01';
+        // opts.headers['anthropic-beta'] = 'messages-2023-12-15';
+
+        if (modelOptions.stream) {
+            // eslint-disable-next-line no-async-promise-executor
+            return new Promise(async (resolve, reject) => {
+                try {
+                    let done = false;
+                    await fetchEventSource(url, {
+                        ...opts,
+                        signal: abortController.signal,
+                        async onopen(response) {
+                            if (response.status === 200) {
+                                return;
+                            }
+                            if (debug) {
+                                console.debug(response);
+                            }
+                            let error;
+                            try {
+                                const body = await response.text();
+                                error = new Error(`Failed to send message. HTTP ${response.status} - ${body}`);
+                                error.status = response.status;
+                                error.json = JSON.parse(body);
+                            } catch {
+                                error = error || new Error(`Failed to send message. HTTP ${response.status}`);
+                            }
+                            throw error;
+                        },
+                        onclose() {
+                            if (debug) {
+                                console.debug('Server closed the connection unexpectedly, returning...');
+                            }
+                            // workaround for private API not sending [DONE] event
+                            if (!done) {
+                                onProgress('[DONE]');
+                                abortController.abort();
+                                resolve();
+                            }
+                        },
+                        onerror(err) {
+                            if (debug) {
+                                console.debug(err);
+                            }
+                            // rethrow to stop the operation
+                            throw err;
+                        },
+                        onmessage(message) {
+                            if (debug) {
+                                console.debug(message);
+                            }
+                            if (!message.data || message.event === 'ping') {
+                                return;
+                            }
+                            if (message.data === '[DONE]') {
+                                onProgress('[DONE]');
+                                abortController.abort();
+                                resolve();
+                                done = true;
+                                return;
+                            }
+                            onProgress(JSON.parse(message.data));
+                        },
+                    });
+                } catch (err) {
+                    reject(err);
+                }
+            });
+        }
+        const response = await fetch(
+            url,
+            {
+                ...opts,
+                signal: abortController.signal,
+            },
+        );
+        if (response.status !== 200) {
+            const body = await response.text();
+            const error = new Error(`Failed to send message. HTTP ${response.status} - ${body}`);
+            error.status = response.status;
+            try {
+                error.json = JSON.parse(body);
+            } catch {
+                error.body = body;
+            }
+            throw error;
+        }
+        return response.json();
     }
 
     async addMessages(conversationId, messages, parentMessageId = null) {

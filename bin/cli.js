@@ -10,6 +10,7 @@ import inquirerAutocompletePrompt from 'inquirer-autocomplete-prompt';
 import ChatGPTClient from '../src/ChatGPTClient.js';
 import BingAIClient from '../src/BingAIClient.js';
 import InfrastructClient from '../src/InfrastructClient.js';
+import ClaudeClient from '../src/ClaudeClient.js';
 import {
     getMessagesForConversation,
     getChildren,
@@ -26,6 +27,7 @@ let conversationData = {};
 let responseData = {};
 let clientToUse;
 let client;
+let clientOptions;
 
 async function loadSettings() {
     // TODO dynamic import isn't updating the settings file
@@ -64,21 +66,41 @@ async function loadSettings() {
     conversationData = settings.cliOptions?.conversationData || settings.conversationData || {};
     responseData = {};
     clientToUse = settings.cliOptions?.clientToUse || settings.clientToUse || 'bing';
-
     // console.log(settings)
 
     switch (clientToUse) {
         case 'bing':
-            client = new BingAIClient({
+            clientOptions = {
                 ...settings.bingAiClient,
+                ...settings.cliOptions.bingOptions,
+            };
+            client = new BingAIClient({
+                ...clientOptions,
                 cache: settings.cacheOptions,
             });
             break;
         case 'infrastruct':
+            clientOptions = {
+                ...settings.infrastructClient,
+                ...settings.cliOptions.infrastructOptions,
+            };
             client = new InfrastructClient(
                 settings.openaiApiKey || settings.infrastructClient.openaiApiKey,
                 {
-                    ...settings.infrastructClient,
+                    ...clientOptions,
+                    cache: settings.cacheOptions,
+                },
+            );
+            break;
+        case 'claude':
+            clientOptions = {
+                ...settings.claudeClient,
+                ...settings.cliOptions.claudeOptions,
+            };
+            client = new ClaudeClient(
+                settings.anthropicApiKey || settings.claudeClient.anthropicApiKey,
+                {
+                    ...clientOptions,
                     cache: settings.cacheOptions,
                 },
             );
@@ -96,7 +118,7 @@ async function loadSettings() {
             title: '😊', padding: 0.7, margin: 1, titleAlignment: 'center', borderStyle: 'arrow', borderColor: 'gray',
         }));
     } else {
-        console.log(tryBoxen(`${getAILabel()} CLooI`, {
+        console.log(tryBoxen(`Welcome to the ${getAILabel()} CLooI`, {
             padding: 0.7, margin: 1, borderStyle: 'double', dimBorder: true,
         }));
     }
@@ -215,10 +237,10 @@ let availableCommands = [
         name: '!open - Load a saved conversation by id',
         value: '!open',
     },
-    {
-        name: '!set - Set a conversationData property',
-        value: '!set',
-    },
+    // {
+    //     name: '!set - Set a conversationData property',
+    //     value: '!set',
+    // },
     // {
     //     name: '!reload - Reload default settings',
     //     value: '!reload',
@@ -316,7 +338,7 @@ async function conversation() {
                 case '!cp':
                     return printOrCopyData('copy', args[1]);
                 case '!set':
-                    return setConversationData(args[1], args.slice(2).join(' '));
+                    return setOptions(args[1], args.slice(2).join(' '));
                 default:
                     return conversation();
             }
@@ -363,7 +385,7 @@ async function conversation() {
             case '!reload':
                 return loadSettings();
             case '!set':
-                return setConversationData();
+                return setOptions();
             case '!delete-all':
                 return deleteAllConversations();
             case '!exit':
@@ -403,6 +425,7 @@ async function onMessage(message) {
         const eventLog = [];
         const response = await client.sendMessage(message, {
             ...conversationData,
+            ...clientOptions.messageOptions,
             abortController: controller,
             onProgress: (token, data) => {
                 // reply += '#';
@@ -629,38 +652,40 @@ async function addMessages(newMessages = null) {
     return showHistory();
 }
 
-async function setConversationData(key = null, value = null) {
+async function setOptions(key = null, value = null) {
+    // todo save old value see if changed
     if (!key) {
-        const { conversationKey } = await inquirer.prompt([
+        const { optionKey } = await inquirer.prompt([
             {
                 type: 'list',
-                name: 'conversationKey',
+                name: 'optionKey',
                 message: 'Select a key:',
-                choices: Object.keys(conversationData),
+                choices: Object.keys(clientOptions),
             },
         ]);
-        key = conversationKey;
+        key = optionKey;
     }
     if (!key) {
         logWarning('No key.');
         return conversation();
     }
     if (!value) {
-        const { conversationValue } = await inquirer.prompt([
+        const { optionValue } = await inquirer.prompt([
             {
                 type: 'editor',
-                name: 'conversationValue',
+                name: 'optionValue',
                 message: 'Enter a value:',
-                waitUserInput: false,
+                default: clientOptions[key],
+                waitUserInput: true,
             },
         ]);
-        value = conversationValue;
+        value = optionValue;
     }
     if (!value) {
         logWarning('No value.');
         // return conversation();
     }
-    conversationData[key] = value;
+    clientOptions[key] = value;
     logSuccess(`Set ${key} to ${value}.`);
     return showHistory();
 }
@@ -1054,7 +1079,9 @@ function getAILabel() {
         case 'bing':
             return 'Bing';
         case 'infrastruct':
-            return settings.infrastructClient?.participants?.ai?.transcript || 'Infrastruct';
+            return 'Infrastruct'; // settings.infrastructClient?.participants?.ai?.display || 'Infrastruct';
+        case 'claude':
+            return 'Claude'; // settings.claudeClient?.participants?.ai?.display || 'Claude';
         default:
             return settings.chatGptClient?.chatGptLabel || 'ChatGPT';
     }
