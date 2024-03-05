@@ -62,12 +62,21 @@ export default {
         openaiApiKey: process.env.OPENAI_API_KEY || '',
         modelOptions: {
             model: 'gpt-4-base',
-            max_tokens: 200,
+            max_tokens: 10,
             stream: true,
-            n: 1,
+            n: 3,
         },
         // (Optional) Set to true to enable `console.debug()` logging
         debug: false,
+    },
+    claudeClient: {
+        anthropicApiKey: process.env.ANTHROPIC_API_KEY || '',
+        modelOptions: {
+            model: 'claude-3-opus-20240229',
+            max_tokens: 1024,
+            temperature: 1,
+            stream: true,
+        },
     },
     chatGptBrowserClient: {
         // (Optional) Support for a reverse proxy for the conversation endpoint (private API server).
@@ -98,7 +107,7 @@ export default {
         perMessageClientOptionsWhitelist: {
             // The ability to switch clients using `clientOptions.clientToUse` will be disabled if `validClientsToUse` is not set.
             // To allow switching clients per message, you must set `validClientsToUse` to a non-empty array.
-            validClientsToUse: ['bing', 'chatgpt', 'chatgpt-browser'], // values from possible `clientToUse` options above
+            validClientsToUse: ['bing', 'chatgpt', 'chatgpt-browser', 'infrastruct', 'claude'], // values from possible `clientToUse` options above
             // The Object key, e.g. "chatgpt", is a value from `validClientsToUse`.
             // If not set, ALL options will be ALLOWED to be changed. For example, `bing` is not defined in `perMessageClientOptionsWhitelist` above,
             // so all options for `bingAiClient` will be allowed to be changed.
@@ -117,16 +126,41 @@ export default {
     },
     // Options for the CLI app
     cliOptions: {
-        // (Optional) Possible options: "chatgpt", "bing", "infrastruct"
+        // (Optional) Possible options: "chatgpt", "bing", "infrastruct", "claude"
         clientToUse: 'bing',
-        showSuggestions: false,
+        showSuggestions: true,
+        showSearches: true,
         conversationData: {
-            toneStyle: 'creative', // creative, precise, balanced, or fast
-            injectionMethod: 'message', // message or context
-            userMessageInjection: 'Continue the conversation in context. Assistant:',
-            systemMessage: fs.readFileSync('./contexts/systemPrompt.txt', 'utf8'),
-            context: fs.readFileSync('./contexts/context.txt', 'utf8'),
-            censoredMessageInjection: '⚠',
+        },
+        bingOptions: {
+            messageOptions: {
+                toneStyle: 'creative', // creative, precise, balanced, or fast
+                injectionMethod: 'message', // message or context
+                userMessageInjection: 'Continue the conversation in context. Assistant:',
+                systemMessage: fs.readFileSync('./contexts/youArePrometheus.txt', 'utf8'),
+                context: fs.readFileSync('./contexts/context.txt', 'utf8'),
+                censoredMessageInjection: '⚠',
+            },
+        },
+        infrastructOptions: {
+            modelOptions: {
+                model: 'gpt-4-base',
+                max_tokens: 300,
+                n: 3,
+            },
+            messageOptions: {
+                systemMessage: fs.readFileSync('./contexts/infrastruct.txt', 'utf8'),
+            },
+        },
+        claudeOptions: {
+            modelOptions: {
+                model: 'claude-3-opus-20240229',
+                max_tokens: 1024,
+                temperature: 1,
+            },
+            messageOptions: {
+                systemMessage: '',
+            },
         },
     },
 };
