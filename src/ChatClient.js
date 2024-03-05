@@ -114,7 +114,7 @@ export default class ChatClient {
 
     toTranscriptMessage(message) {
         const name = this.convertAlias('author', 'transcript', message.author);
-        const messageType = message.type || this.participants[message.author].defaultMessageType || 'message';
+        const messageType = message.type || this.participants[message.author]?.defaultMessageType || 'message';
         return `[${name}](#${messageType})\n${message.text}`;
     }
 

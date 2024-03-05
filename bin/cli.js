@@ -121,8 +121,21 @@ async function hasSiblings() {
 
 let availableCommands = [
     {
-        name: '!editor - Open the editor (for multi-line messages)',
-        value: '!editor',
+        name: '!mu - Regenerate last response',
+        value: '!mu',
+        available: async () => Boolean(conversationData.parentMessageId),
+    },
+    {
+        name: '!gen - Generate response',
+        value: '!gen',
+    },
+    {
+        name: '!save - Save conversation state',
+        value: '!save',
+    },
+    {
+        name: '!load - Load conversation state',
+        value: '!load',
     },
     {
         name: '!resume - Resume last conversation',
@@ -137,51 +150,38 @@ let availableCommands = [
         value: '!new',
     },
     {
-        name: '!gen - Generate a response',
-        value: '!gen',
-    },
-    {
-        name: '!mu - Regenerate the last response',
-        value: '!mu',
+        name: '!rw - Rewind to a previous message',
+        value: '!rw',
         available: async () => Boolean(conversationData.parentMessageId),
     },
     {
-        name: '!add - Add messages to the conversation',
-        value: '!add',
-    },
-    {
-        name: '!rewind - Rewind conversation to a previous message',
-        value: '!rewind',
-        available: async () => Boolean(conversationData.parentMessageId),
-    },
-    {
-        name: '!child - Navigate to a child message',
-        value: '!child',
+        name: '!fw - Go forward to a child message',
+        value: '!fw',
         available: hasChildren,
     },
     {
-        name: '!alt - Navigate to an alternate message',
+        name: '!alt - Go to a sibling message',
         value: '!alt',
         available: hasSiblings,
     },
+    // {
+    //     name: '!w (up) - Navigate to the parent message',
+    //     value: '!w',
+    //     available: async () => Boolean(conversationData.parentMessageId),
+    // },
+    // {
+    //     name: '!s (down) - Navigate to the first child message',
+    //     value: '!s',
+    //     available: hasChildren,
+    // },
     {
-        name: '!w (up) - Navigate to the parent message',
-        value: '!w',
-        available: async () => Boolean(conversationData.parentMessageId),
-    },
-    {
-        name: '!s (down) - Navigate to the first child message',
-        value: '!s',
-        available: hasChildren,
-    },
-    {
-        name: '!d (right) - Navigate to the next sibling message',
-        value: '!d',
+        name: '!> (right) - Go to the next sibling',
+        value: '!>',
         available: hasSiblings,
     },
     {
-        name: '!a (left) - Navigate to the previous sibling message',
-        value: '!a',
+        name: '!< (left) - Go to the previous sibling',
+        value: '!<',
         available: hasSiblings,
     },
     {
@@ -189,39 +189,40 @@ let availableCommands = [
         value: '!cp',
     },
     {
-        name: '!print - Print data to console',
-        value: '!print',
+        name: '!pr - Print data to console',
+        value: '!pr',
     },
     {
-        name: '!history - Print conversation history',
-        value: '!history',
+        name: '!ml - Open the editor (for multi-line messages)',
+        value: '!ml',
+    },
+    {
+        name: '!edit - Edit and fork the current message',
+        value: '!edit',
         available: async () => Boolean(conversationData.parentMessageId),
     },
     {
-        name: '!save - Save conversation state',
-        value: '!save',
+        name: '!concat - Concatenate message(s) to the conversation',
+        value: '!concat',
     },
     {
-        name: '!load - Load conversation state',
-        value: '!load',
+        name: '!history - Show conversation history',
+        value: '!history',
+        available: async () => Boolean(conversationData.parentMessageId),
     },
+
     {
         name: '!open - Load a saved conversation by id',
         value: '!open',
     },
     {
-        name: '!reload - Reload default settings',
-        value: '!reload',
-    },
-    {
-        name: '!set - Set a conversation data property',
+        name: '!set - Set a conversationData property',
         value: '!set',
     },
-    {
-        name: '!delete-all - Delete all conversations',
-        value: '!delete-all',
-        available: async () => clientToUse === 'chatgpt',
-    },
+    // {
+    //     name: '!reload - Reload default settings',
+    //     value: '!reload',
+    // },
     {
         name: '!exit - Exit CLooI',
         value: '!exit',
@@ -229,6 +230,21 @@ let availableCommands = [
     {
         name: '!debug - Debug',
         value: '!debug',
+    },
+    {
+        name: '!delete-all - Delete all conversations',
+        value: '!delete-all',
+        available: async () => clientToUse === 'chatgpt',
+    },
+    {
+        name: '!rw -1 - Rewind one step',
+        value: '!rw -1',
+        available: async () => Boolean(conversationData.parentMessageId),
+    },
+    {
+        name: '!fw 0 - Go to first child',
+        value: '!fw 0',
+        available: hasChildren,
     },
 ];
 
@@ -281,7 +297,7 @@ async function conversation() {
         const args = message.split(' ');
         if (args.length > 1) {
             switch (args[0]) {
-                case '!rewind':
+                case '!rw':
                     return rewindTo(parseInt(args[1], 10));
                 case '!load':
                     return loadSavedState(args[1]);
@@ -289,13 +305,13 @@ async function conversation() {
                     return loadConversation(args[1]);
                 case '!save':
                     return saveConversationState(args[1]);
-                case '!child':
+                case '!fw':
                     return selectChildMessage(parseInt(args[1], 10));
-                case '!add':
+                case '!concat':
                     return addMessages(args.slice(1).join(' '));
                 case '!alt':
                     return selectSiblingMessage(parseInt(args[1], 10));
-                case '!print':
+                case '!pr':
                     return printOrCopyData('print', args[1]);
                 case '!cp':
                     return printOrCopyData('copy', args[1]);
@@ -306,8 +322,10 @@ async function conversation() {
             }
         }
         switch (message) {
-            case '!editor':
+            case '!ml':
                 return useEditor();
+            case '!edit':
+                return editMessage(conversationData.parentMessageId);
             case '!resume':
                 return loadConversationState();
             case '!new':
@@ -316,11 +334,11 @@ async function conversation() {
                 return onMessage('');
             case '!mu':
                 return retryResponse();
-            case '!add':
+            case '!concat':
                 return addMessages();
-            case '!rewind':
+            case '!rw':
                 return rewindPrompt();
-            case '!child':
+            case '!fw':
                 return selectChildMessage();
             case '!alt':
                 return selectSiblingMessage();
@@ -328,13 +346,13 @@ async function conversation() {
                 return rewindTo(-1);
             case '!s':
                 return selectChildMessage(0);
-            case '!d':
+            case '!>':
                 return selectSiblingMessage(getSiblingIndex(messages, conversationData.parentMessageId) + 1);
-            case '!a':
+            case '!<':
                 return selectSiblingMessage(getSiblingIndex(messages, conversationData.parentMessageId) - 1);
             case '!cp':
                 return printOrCopyData('copy');// return copyConversation();
-            case '!print':
+            case '!pr':
                 return printOrCopyData('print');
             case '!history':
                 return showHistory();
@@ -488,7 +506,7 @@ async function rewindPrompt() {
         return conversation();
     }
     const choices = messageHistory.map((conversationMessage, index) => ({
-        name: `[${index}] ${conversationMessage.role === getAILabel() ? getAILabel() : 'User'}: ${conversationMessage.message.slice(0, 200) + (conversationMessage.message.length > 200 ? '...' : '')}`,
+        name: `[${index}] ${conversationMessage.role}: ${conversationMessage.message.slice(0, 200) + (conversationMessage.message.length > 200 ? '...' : '')}`,
         value: index,
     }));
     const { index } = await inquirer.prompt([
@@ -664,6 +682,47 @@ async function useEditor() {
     return onMessage(message);
 }
 
+async function editMessage(messageId) {
+    const currentMessage = await getCurrentMessage();
+    if (!currentMessage) {
+        logWarning('Current message not found.');
+        return conversation();
+    }
+    const initialMessage = currentMessage.message;
+    console.log(initialMessage);
+    let { message } = await inquirer.prompt([
+        {
+            type: 'editor',
+            name: 'message',
+            message: 'Edit the message:',
+            default: initialMessage,
+            waitUserInput: true,
+        },
+    ]);
+    message = message.trim();
+    if (!message) {
+        logWarning('Message empty.');
+        return conversation();
+    }
+    if (message === initialMessage) {
+        logWarning('Message unchanged.');
+        return conversation();
+    }
+    const editedMessage = {
+        ...currentMessage,
+        message,
+        id: crypto.randomUUID(),
+    };
+    const convoTree = await client.conversationsCache.get(getConversationId());
+    convoTree.messages.push(editedMessage);
+    await client.conversationsCache.set(getConversationId(), convoTree);
+
+    logSuccess(`Cloned and edited message ${messageId}.`);
+
+    return selectMessage(editedMessage.id);
+}
+
+
 async function saveConversationState(name = null) {
     if (!name) {
         const { conversationName } = await inquirer.prompt([
@@ -786,6 +845,7 @@ async function getConversationHistoryString() {
     return client.toTranscript(messageHistory);
 }
 
+
 async function printOrCopyData(action, type = null) {
     if (action !== 'print' && action !== 'copy') {
         logWarning('Invalid action.');
@@ -798,6 +858,10 @@ async function printOrCopyData(action, type = null) {
                 name: 'dataType',
                 message: 'Select a data type:',
                 choices: [
+                    {
+                        name: '. (current message text)',
+                        value: '.',
+                    },
                     'response',
                     'responseText',
                     'eventLog',
@@ -818,6 +882,14 @@ async function printOrCopyData(action, type = null) {
     let data;
     let currentMessage;
     switch (type) {
+        case '.':
+            currentMessage = await getCurrentMessage();
+            if (!currentMessage) {
+                logWarning('Current message not found.');
+                return conversation();
+            }
+            data = currentMessage.message;
+            break;
         case 'response':
             data = responseData.response;
             break;

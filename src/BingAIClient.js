@@ -60,6 +60,7 @@ export default class BingAIClient extends ChatClient {
             };
         }
         this.debug = this.options.debug;
+        // this.options.features.genImage = true;
         if (this.options.features.genImage) {
             this.bic = new BingImageCreator(this.options);
         }
@@ -337,11 +338,13 @@ export default class BingAIClient extends ChatClient {
 
         let userMessage;
 
-        if (message) {
+        if (typeof message === 'string' && message.length) {
             userMessage = {
                 author: 'user',
                 text: message,
             };
+        } else if (message) {
+            userMessage = message;
         }
 
         let conversation;
@@ -350,7 +353,7 @@ export default class BingAIClient extends ChatClient {
 
         if (typeof systemMessage === 'string' && systemMessage.length) {
             systemMessage = {
-                text: systemMessage,
+                text: `${systemMessage}`,
                 author: 'system',
                 type: 'additional_instructions',
             };
@@ -421,7 +424,7 @@ export default class BingAIClient extends ChatClient {
         }
 
         let userConversationMessage;
-        if (message) {
+        if (userMessage) {
             userConversationMessage = this.createConversationMessage(
                 userMessage,
                 parentMessageId,
@@ -581,20 +584,23 @@ export default class BingAIClient extends ChatClient {
                         }
                         if (messages[0]?.contentType === 'IMAGE') {
                             // You will never get a message of this type without 'gencontentv3' being on.
-                            // bicIframe = this.bic
-                            //     .genImageIframeSsr(
-                            //         messages[0].text,
-                            //         messages[0].messageId,
-                            //         progress => (progress?.contentIframe
-                            //             ? onProgress(progress?.contentIframe, messages[0])
-                            //             : null),
-                            //     )
-                            //     .catch((error) => {
-                            //         onProgress(error.message);
-                            //         bicIframe.isError = true;
-                            //         return error.message;
-                            //     });
                             console.debug('Image creation event');
+                            console.log(messages[0]);
+
+                            bicIframe = this.bic
+                                .genImageIframeSsr(
+                                    messages[0].text,
+                                    messages[0].messageId,
+                                    progress => (progress?.contentIframe
+                                        ? onProgress(progress?.contentIframe, messages[0])
+                                        : null),
+                                )
+                                .catch((error) => {
+                                    console.error(error);
+                                    onProgress(error.message);
+                                    bicIframe.isError = true;
+                                    return error.message;
+                                });
                             return;
                         }
                         const updatedText = messages[0].text;
@@ -697,6 +703,7 @@ export default class BingAIClient extends ChatClient {
                             // delete eventMessage.suggestedResponses;
                         }
                         if (bicIframe) {
+                            console.log('bicIframe');
                             // the last messages will be a image creation event if bicIframe is present.
                             let i = messages.length - 1;
                             while (
