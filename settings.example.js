@@ -127,7 +127,7 @@ export default {
     // Options for the CLI app
     cliOptions: {
         // (Optional) Possible options: "bing", "infrastruct", "claude"
-        clientToUse: 'bing',
+        clientToUse: 'claude',
         showSuggestions: true,
         showSearches: true,
         conversationData: {

@@ -208,3 +208,5 @@ test.js
 cache.json
 
 .local/
+
+.data/*

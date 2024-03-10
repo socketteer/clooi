@@ -232,7 +232,19 @@ let availableCommands = [
         value: '!history',
         available: async () => Boolean(conversationData.parentMessageId),
     },
-
+    {
+        name: '!exit - Exit CLooI',
+        value: '!exit',
+    },
+    {
+        name: '!export - Export conversation tree to JSON',
+        value: '!export',
+        available: async () => Boolean(getConversationId()),
+    },
+    {
+        name: '!import - Import conversation tree from JSON',
+        value: '!import',
+    },
     {
         name: '!open - Load a saved conversation by id',
         value: '!open',
@@ -245,10 +257,7 @@ let availableCommands = [
     //     name: '!reload - Reload default settings',
     //     value: '!reload',
     // },
-    {
-        name: '!exit - Exit CLooI',
-        value: '!exit',
-    },
+
     {
         name: '!debug - Debug',
         value: '!debug',
@@ -392,6 +401,10 @@ async function conversation() {
                 return true;
             case '!debug':
                 return debug();
+            case '!export':
+                return exportConversation();
+            case '!import':
+                return importConversation();
             default:
                 return conversation();
         }
@@ -620,9 +633,20 @@ async function selectSiblingMessage(index = null) {
 }
 
 async function debug() {
+    const currentConversationId = getConversationId();
+    const savedConversations = await client.conversationsCache.get('savedConversations') || [];
+    console.log(savedConversations);
+    const savedStates = [];
+    for (const name of savedConversations) {
+        conversationData = (await client.conversationsCache.get(name)) || {};
+        if (conversationData && getConversationId(conversationData) === currentConversationId) {
+            savedStates.push({ name, conversationData });
+        }
+    }
+    console.log(savedStates);
     // console.log(client.getDataType(await getHistory()));
-    const currentMessage = await getCurrentMessage();
-    console.log(Object.keys(BingAIClient.getSearchResults(currentMessage)));
+    // const currentMessage = await getCurrentMessage();
+    // console.log(Object.keys(BingAIClient.getSearchResults(currentMessage)));
     return conversation();
 }
 
@@ -747,8 +771,7 @@ async function editMessage(messageId) {
     return selectMessage(editedMessage.id);
 }
 
-
-async function saveConversationState(name = null) {
+async function saveConversationState(name = null, data = conversationData) {
     if (!name) {
         const { conversationName } = await inquirer.prompt([
             {
@@ -781,7 +804,7 @@ async function saveConversationState(name = null) {
         savedConversations.push(name);
         await client.conversationsCache.set('savedConversations', savedConversations);
     }
-    await client.conversationsCache.set(name, conversationData);
+    await client.conversationsCache.set(name, data);
     // await client.conversationsCache.set(name, conversationData);
     logSuccess(`Saved state as "${name}".`);
     return conversation();
@@ -844,6 +867,105 @@ async function loadConversation(conversationId) {
     conversationData.parentMessageId = lastMessageId;
     logSuccess(`Resumed conversation ${conversationId}.`);
     return showHistory();
+}
+
+async function getSavedStatesForConversation(conversationId = null) {
+    if (!conversationId) {
+        conversationId = getConversationId();
+    }
+    // const currentConversationId = getConversationId();
+    const savedConversations = await client.conversationsCache.get('savedConversations') || [];
+    // console.log(savedConversations);
+    const savedStates = [];
+    for (const name of savedConversations) {
+        conversationData = (await client.conversationsCache.get(name)) || {};
+        if (conversationData && getConversationId(conversationData) === conversationId) {
+            savedStates.push({ name, conversationData });
+        }
+    }
+    // savedConversations.forEach(async (name) => {
+    //     const data = client.conversationsCache.get(name);
+    //     if (data && getConversationId(data) === conversationId) {
+    //         savedStates.push({ name, data });
+    //     }
+    // });
+    return savedStates;
+}
+
+async function exportConversation(conversationId = null) {
+    if (!conversationId) {
+        conversationId = getConversationId();
+    }
+    if (!conversationId) {
+        logWarning('No conversation id.');
+        return conversation();
+    }
+    const conversationDict = await client.conversationsCache.get(conversationId);
+    if (!conversationDict) {
+        logWarning('Conversation not found.');
+        return conversation();
+    }
+    conversationDict.id = conversationId;
+    // const savedStates = await getSavedStatesForConversation(conversationId);
+    // conversationDict.savedStates = savedStates;
+
+    // prompt for filename
+    const { name } = await inquirer.prompt([
+        {
+            type: 'input',
+            name: 'name',
+            message: 'Enter a filename:',
+            default: `${conversationId}`,
+        },
+    ]);
+
+    const filename = `${name}.json`;
+    const filePath = `./${filename}`;
+    fs.writeFileSync(filePath, JSON.stringify(conversationDict, null, 2));
+    logSuccess(`Exported conversation to ${filename}.`);
+    return conversation();
+}
+
+async function importConversation(filename = null) {
+    if (!filename) {
+        const { name } = await inquirer.prompt([
+            {
+                type: 'input',
+                name: 'name',
+                message: 'Enter a filename:',
+            },
+        ]);
+        filename = name;
+    }
+    if (!filename) {
+        logWarning('No filename.');
+        return conversation();
+    }
+    const filePath = `./${filename}`;
+    if (!fs.existsSync(filePath)) {
+        logWarning('File not found.');
+        return conversation();
+    }
+    const conversationDict = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+    if (!conversationDict) {
+        logWarning('Invalid file.');
+        return conversation();
+    }
+    const conversationId = conversationDict.id;
+    if (!conversationId) {
+        logWarning('Conversation id not found.');
+        return conversation();
+    }
+    await client.conversationsCache.set(conversationId, conversationDict);
+    logSuccess(`Imported conversation from ${filename}.`);
+    // for (const { name, data } of conversationDict.savedStates) {
+    //     await saveConversationState(name, data);
+    // }
+    // conversationDict.savedStates.forEach(async ({ name, data }) => {
+    //     await saveConversationState(name, data);
+    // });
+
+    return conversation();
 }
 
 async function newConversation() {
@@ -1087,10 +1209,10 @@ function getAILabel() {
     }
 }
 
-function getConversationId() {
-    const convId = (clientToUse === 'bing') ? conversationData.jailbreakConversationId : conversationData.conversationId;
+function getConversationId(data = conversationData) {
+    const convId = (clientToUse === 'bing') ? data.jailbreakConversationId : data.conversationId;
     if (!convId) {
-        logWarning('No conversation id.');
+        // logWarning('No conversation id.');
         return null;
     }
     return convId;

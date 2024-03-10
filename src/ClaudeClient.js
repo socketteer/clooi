@@ -34,7 +34,6 @@ export default class ClaudeClient extends ChatClient {
         this.setOptions(options);
     }
 
-
     setOptions(options) {
         super.setOptions(options);
         if (this.options.openaiApiKey) {
@@ -189,5 +188,11 @@ export default class ClaudeClient extends ChatClient {
             content: conversationMessage.message,
             role,
         };
+    }
+
+    toTranscriptMessage(message) {
+        const name = this.convertAlias('author', 'transcript', message.role);
+        const messageType = message.type || this.participants[message.author]?.defaultMessageType || 'message';
+        return `[${name}](#${messageType})\n${message.content}`;
     }
 }
