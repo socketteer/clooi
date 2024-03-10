@@ -120,7 +120,7 @@ export default class ClaudeClient extends ChatClient {
         let reply = '';
         let result = null;
         if (typeof opts.onProgress === 'function' && this.modelOptions.stream) {
-            result = await this.getCompletion(
+            await this.getCompletion(
                 params,
                 headers,
                 (progressMessage) => {
@@ -139,6 +139,8 @@ export default class ClaudeClient extends ChatClient {
                     if (progressMessage.type === 'content_block_delta') {
                         opts.onProgress(progressMessage.delta.text);
                         reply += progressMessage.delta.text;
+                    } else {
+                        console.debug(progressMessage);
                     }
                 },
                 opts.abortController || new AbortController(),
@@ -156,6 +158,7 @@ export default class ClaudeClient extends ChatClient {
         }
 
         // console.log(reply);
+
 
         parentMessageId = userConversationMessage ? userConversationMessage.id : parentMessageId;
 
@@ -176,7 +179,7 @@ export default class ClaudeClient extends ChatClient {
             messageId: replyMessage.id,
             // messages: conversation.messages,
             response: reply,
-            details: result,
+            details: result || null,
         };
     }
 

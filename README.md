@@ -11,10 +11,112 @@
 2. Install dependencies with `npm install`
 3. Rename `settings.example.js` to `settings.js` in the root directory and change the settings where required.
 
+## CLooI instructions
+
+The CLI (Command Loom Interface) app allows you to interact with the chat client using a command line interface and save and load (branching) conversation histories. 
+
+### Running the CLI app
+
+```bash
+npm run cli
+```
+
+### Commands
+
+Running the app will prompt you to enter a message. 
+
+You can also enter commands (prepended with `!`). Entering `!` will show the list of currently available commands. 
+
+<details>
+<summary><strong>Show/hide all CLooI commands</strong></summary>
+
+#### generation
+
+- `!mu`: Regenerate the last response
+- `!gen`: Generate a response (without sending a user message)
+
+#### saving/loading
+
+- `!save [NAME]`: Save conversation state. 
+    - `[NAME]`: name to save the conversation state with. If not provided, shows a prompt to enter a name.
+- `!load [NAME]`: Load conversation state.
+    - `[NAME]`: name of the conversation state to load. If not provided, shows a prompt to select a conversation state to load.
+- `!resume`: Resume last conversation
+- `!new`: Start new conversation
+- `!open ID`: Load a saved conversation by id.
+    - `ID`: id of the conversation state to load.
+
+#### navigation
+
+- `!rw [INDEX]`: Rewind conversation to a previous message. 
+    - `[INDEX]`: index of the message to rewind to (if positive), or the number of messages to rewind (if negative). If not provided, shows a prompt to select a message to rewind to.
+- `!fw [INDEX]`: Navigate to a child message. 
+    - `[INDEX]`: index of the child message to navigate to. (default: 0)
+- `!alt [INDEX]`: Navigate to an alternate message. 
+    - `[INDEX]`: index of the alternate (sibling) message to navigate to. If not provided, shows a prompt to select an alternate message.
+- `!>`: Navigate to the next sibling message
+- `!<`: Navigate to the previous sibling message
+
+#### information
+
+**note**: `!cp .` and `!pr .` copies/prints the text of the last message in the conversation.
+
+- `!cp [TYPE]`: Copy data to clipboard. 
+    - `[TYPE]`: type of data to copy. If not provided, shows a prompt to select the type of data to copy.
+- `!pr [TYPE]`: Print data to console.
+    - `[TYPE]`: type of data to print. If not provided, shows a prompt to select the type of data to print.
+- `!history`: Show conversation history in console
+
+#### editing
+
+- `!ml`: Open the editor (for multi-line messages)
+- `!edit`: Edit and fork the current message
+- `!concat [MESSAGE]`: Concatenate a message or messages to the conversation without triggering a response.
+    - `[MESSAGE]`: the message to add. If not provided, shows a prompt to enter a message or message history transcript.
+
+### other
+
+- `!set [OPTION] [VALUE]`: Set an option
+    - `[OPTION]`: option to set
+    - `[VALUE]`: value to set the option to
+    - If not provided, shows a prompt to select an option to set.
+- `!reload`: Reload settings
+- `!delete-all`: Delete all conversations
+- `!exit`: Exit CLooI
+- `!debug`: Run debug command
+
+---
+
+</details>
+
+### CLI Options
+
+- `cliOptions.clientToUse`: The API client to use. 
+    - `'bing'`: Use the BingAIClient (unofficial Copilot API)
+    - `'infrastruct'`: Use the Infrastruct client (works with any OpenAI completion model)
+    - `'claude'`: Use the ClaudeClient (works with any Anthropic API chat model)
+    - `'chatgpt'`: Use the chatGPT API client. **NOT IMPLEMENTED**
+- `cliOptions.showSuggestions`: Whether to show user suggestions after Bing messages.
+- `cliOptions.showSearches`: Whether to show the searches that Bing makes. **NOT IMPLEMENTED**
+- `cliOptions.bingOptions`: Dictionary of options to configure BingAPIClient, used when `clientToUse === 'bing'`.
+    - `messageOptions`: Options sent per BingAPIClient message request. See documentation for [BingAIClient](#bingaiclient) sendMessage parameters for details about options.
+- `cliOptions.infrastructOptions`: Dictionary of options to configure InfrastructClient, used when `clientToUse === 'infrastruct'`.
+- `cliOptions.claudeOptions`: Dictionary of options to configure InfrastructClient, used when `clientToUse === 'claude'`.
+
+#### Changing default options
+
+The default options for the CLI app are stored in `settings.js`, under `cliOptions`. You can change the default options by modifying this file. These options will load by default when you run the CLI app or when you run the `!reload` command.
+
+The system prompt (passed as a request parameter for Claude, prepended to prompt for Infrastruct, injected after Bing's normal system prompt) defaults are stored in `./contexts/claudeSystemPrompt.txt` (for Claude), `contexts/systemPrompt.txt` (for Bing) and `contexts/infrastruct.txt` (for Infrastruct). You can change these files to change the default system prompt and context, or set different strings or point to different files in `settings.js`. The `contexts/` folder also contains alternative system prompts.
+
+### Problems
+
+- reloading settings doesn't update settings if files have changed. If you want to load new settings, you need to restart the app. (`!exit` and then `npm run cli`, then `!resume` to continue the conversation)
+
 ## BingAIClient
 
 <details>
-<summary><strong>sendMessage</strong></summary>
+<summary><strong>sendMessage parameters</strong></summary>
 
 - `message`: The user message to send to the API. String.
 - `opts`: A dictionary of options to configure the API request:
@@ -32,7 +134,7 @@
     - `systemMessage`: Text of the system message to append to Bing's instructions under the heading `[system](#additional_instructions)`.
     - `context`: Text of the context to inject into the conversation (acts like web page context)
     - `censoredMessageInjection`: String to append to messages that get cut off by Bing's filter in the conversation history.
-- `appendMessages`: optional array of messages or string in standard format to append to the conversation history. Messages will be appended in the order they are provided, and before the user message.
+    - `appendMessages`: optional array of messages or string in standard format to append to the conversation history. Messages will be appended in the order they are provided, and before the user message.
 
 </details>
 
@@ -199,83 +301,3 @@ if (message.event === 'error') {
 - Method 1 is simple, but Time to First Byte (TTFB) is long.
 - Method 2 uses a non-standard implementation of [server-sent event API](https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events/Using_server-sent_events); you should import `fetch-event-source` first and use `POST` method.
 
-
-## CLooI instructions
-
-The CLI (Command Loom Interface) app allows you to interact with the chat client using a command line interface and save and load (branching) conversation histories. 
-
-### Running the CLI app
-
-```bash
-npm run cli
-```
-
-### Commands
-
-Running the app will prompt you to enter a message. 
-
-You can also enter commands (prepended with `!`). Entering `!` will show the list of currently available commands. 
-
-<details>
-<summary><strong>All commands</strong></summary>
-
-- `!editor`: Open the editor (for multi-line messages)
-- `!resume`: Resume last conversation
-- `!new`: Start new conversation
-- `!gen`: Generate a response (without sending a user message)
-- `!mu`: Regenerate the last response
-- `!add [MESSAGE]`: Add a message to the conversation without triggering a response.
-    - `[MESSAGE]`: the message to add. If not provided, shows a prompt to enter a message or message history transcript.
-- `!rewind [INDEX]`: Rewind conversation to a previous message. 
-    - `[INDEX]`: index of the message to rewind to (if positive), or the number of messages to rewind (if negative). If not provided, shows a prompt to select a message to rewind to.
-- `!child [INDEX]`: Navigate to a child message. 
-    - `[INDEX]`: index of the child message to navigate to. (default: 0)
-- `!alt [INDEX]`: Navigate to an alternate message. 
-    - `[INDEX]`: index of the alternate (sibling) message to navigate to. If not provided, shows a prompt to select an alternate message.
-- `!w`: Navigate to the parent message
-- `!s`: Navigate to the first child message
-- `!d`: Navigate to the next sibling message
-- `!a`: Navigate to the previous sibling message
-- `!copy [TYPE]`: Copy data to clipboard. 
-    - `[TYPE]`: type of data to copy. If not provided, shows a prompt to select the type of data to copy.
-- `!print [TYPE]`: Print data to console.
-    - `[TYPE]`: type of data to print. If not provided, shows a prompt to select the type of data to print.
-- `!history`: Show conversation history in console
-- `!set [OPTION] [VALUE]`: Set an option
-    - `[OPTION]`: option to set
-    - `[VALUE]`: value to set the option to
-    - If not provided, shows a prompt to select an option to set.
-- `!save [NAME]`: Save conversation state. 
-    - `[NAME]`: name to save the conversation state with. If not provided, shows a prompt to enter a name.
-- `!load [NAME]`: Load conversation state.
-    - `[NAME]`: name of the conversation state to load. If not provided, shows a prompt to select a conversation state to load.
-- `!open ID`: Load a saved conversation by id.
-    - `ID`: id of the conversation state to load.
-- `!reload`: Reload settings
-- `!delete-all`: Delete all conversations
-- `!exit`: Exit CLoomI
-- `!debug`: Run debug command
-
-</details>
-
-### Options
-
-- `clientToUse`: The API client to use. 
-    - `'bing'`: Use the BingAIClient
-    - `'chatgpt'`: Use the chatGPT API client (Not yet tested)
-    - `'infrastruct'`: Use the Infrastruct client
-- `showSuggestions`: Whether to show user suggestions after Bing messages.
-- `conversationData`: Dictionary of options to configure Client request
-
-#### Changing default options
-
-The default options for the CLI app are stored in `settings.js`, under `cliOptions`. You can change the default options by modifying this file. These options will load by default when you run the CLI app or when you run the `!reload` command.
-
-The system prompt (injected after Bing's normal system prompt) default and context are stored in `contexts/systemPrompt.txt` and `contexts/context.txt` respectively. You can change these files to change the default system prompt and context, or set different strings or point to different files in `settings.js`.
-
-Note: For infrastruct or ChatGPT, most of the generation options are set in the same way as in the API, in `modelOptions` in the respective client's options in `settings.js`.
-
-
-### Problems
-
-- reloading settings doesn't update settings if files have changed. If you want to load new settings, you need to restart the app. (`!exit` and then `npm run cli`, then `!resume` to continue the conversation)
