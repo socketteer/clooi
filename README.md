@@ -14,7 +14,7 @@
 
 ## CLooI instructions
 
-![CLooI](/assets/clooi.png)
+![CLooI](./demos/bcli.gif)
 
 The CLI (Command Loom Interface) app allows you to interact with the chat client using a command line interface and save and load (branching) conversation histories. 
 
