@@ -10,8 +10,11 @@
 1. Clone this repository: `git clone https://github.com/socketteer/bingleton-api`
 2. Install dependencies with `npm install`
 3. Rename `settings.example.js` to `settings.js` in the root directory and change the settings where required.
+    - **Note**: When pulling changes from this repo, attend to changes to `settings.example.js` which you may want or need to copy over to your settings.js file.
 
 ## CLooI instructions
+
+![CLooI](/assets/clooi.png)
 
 The CLI (Command Loom Interface) app allows you to interact with the chat client using a command line interface and save and load (branching) conversation histories. 
 
