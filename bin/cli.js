@@ -17,6 +17,7 @@ import {
     getSiblings,
     getSiblingIndex,
 } from '../src/conversation.js';
+import crypto from 'crypto';
 
 const arg = process.argv.find(_arg => _arg.startsWith('--settings'));
 const path = arg?.split('=')[1] ?? './settings.js';

@@ -1,6 +1,8 @@
 
 import ChatClient from './ChatClient.js';
 
+import crypto from 'crypto';
+
 import { getMessagesForConversation } from './conversation.js';
 
 export default class ClaudeClient extends ChatClient {

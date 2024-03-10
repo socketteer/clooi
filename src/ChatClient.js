@@ -1,3 +1,5 @@
+import crypto from 'crypto';
+
 import Keyv from 'keyv';
 import { fetchEventSource } from '@waylaidwanderer/fetch-event-source';
 import { Agent } from 'undici';
