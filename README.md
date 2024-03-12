@@ -1,5 +1,7 @@
 # Bingleton API and CLooI
 
+If you are a complete n00b to coding, you can consult the [n00b's guide to running the CLooI](./n00b-guide.md) which is written for non-coders unlike some of this readme.
+
 ## Prerequisites
 - Node.js >= 16.0.0
 - npm
