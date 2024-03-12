@@ -1,5 +1,7 @@
 # CLooI n00b guide
 
+**Installation guide written for people without coding experience.**
+
 **Tip:** I highly recommend asking a language model to help with the installation if you run into any difficulties. You can paste this whole guide into the conversation as context.
 
 ## overview
