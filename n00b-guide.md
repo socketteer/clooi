@@ -13,6 +13,7 @@ To use the CLooI (aka the BCLI), you need:
 - To clone the files of this project onto your computer using `git clone https://github.com/socketteer/bingleton-api`
 - To install the dependencies of the project using the `npm install` command
 - To rename the `settings.example.js` file to `settings.js`
+- Set API key(s) as environmental variables
 - To run the CLooI using `npm run cli`
 
 ## detailed step-by-step
