@@ -59,4 +59,4 @@ npm run cli
 ```
 in the `bingleton-api` folder.
 
-See [README.md](./README.md) (the document at the bottom of https://github.com/socketteer/bingleton-api, also one of the files in the `bingleton-api` folder that you cloned) for documentation about commands and settings.
+See [README.md](./README.md) (also one of the files in the `bingleton-api` folder that you cloned) for documentation about commands and settings.
