@@ -587,8 +587,14 @@ export default class BingAIClient extends ChatClient {
                             return;
                         }
                         if (messages[0].contentOrigin === 'Apology') {
-                            console.debug('Apology event');
+                            // console.debug('Apology event');
                             console.log(messages[0]);
+                            // resolve({
+                            //     message: messages[0],
+                            //     conversationExpiryTime: event?.arguments?.[0]?.conversationExpiryTime,
+                            //     searchResults: internalSearchResults,
+                            // });
+                            // reject(new Error(messages[0].text));
                             return;
                         }
                         if (messages[0]?.contentType === 'IMAGE') {
@@ -615,6 +621,8 @@ export default class BingAIClient extends ChatClient {
 
                         let difference = '';
                         let updatedText = replySoFar;
+
+                        // console.log('normal event!');
 
                         switch (messages[0].messageType) {
                             case 'InternalSearchResult':

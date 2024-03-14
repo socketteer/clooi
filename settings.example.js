@@ -126,10 +126,10 @@ export default {
     },
     // Options for the CLI app
     cliOptions: {
-        // (Optional) Possible options: "bing", "infrastruct", "claude"
+        // Possible options: "bing", "infrastruct", "claude"
         clientToUse: 'claude',
         showSuggestions: true,
-        showSearches: true,
+        showSearches: false, // not implemented yet
         conversationData: {
         },
         bingOptions: {

@@ -7,6 +7,7 @@ import ora from 'ora';
 import clipboard from 'clipboardy';
 import inquirer from 'inquirer';
 import inquirerAutocompletePrompt from 'inquirer-autocomplete-prompt';
+import crypto from 'crypto';
 import ChatGPTClient from '../src/ChatGPTClient.js';
 import BingAIClient from '../src/BingAIClient.js';
 import InfrastructClient from '../src/InfrastructClient.js';
@@ -17,7 +18,6 @@ import {
     getSiblings,
     getSiblingIndex,
 } from '../src/conversation.js';
-import crypto from 'crypto';
 
 const arg = process.argv.find(_arg => _arg.startsWith('--settings'));
 const path = arg?.split('=')[1] ?? './settings.js';
@@ -446,7 +446,9 @@ async function onMessage(message) {
                 reply += diff;
                 const output = aiMessageBox(reply.trim());
                 spinner.text = `${spinnerPrefix}\n${output}`;
-                eventLog.push(data);
+                if (data) {
+                    eventLog.push(data);
+                }
                 responseData = {
                     textSoFar: reply,
                     eventLog,
@@ -994,7 +996,6 @@ async function getConversationHistoryString() {
     return client.toTranscript(messageHistory);
 }
 
-
 async function printOrCopyData(action, type = null) {
     if (action !== 'print' && action !== 'copy') {
         logWarning('Invalid action.');
@@ -1128,13 +1129,24 @@ function tryBoxen(input, options) {
 
 function aiMessageBox(message, title = null) {
     return tryBoxen(`${message}`, {
-        title: title || getAILabel(), padding: 0.7, margin: {top: 1, bottom: 0, left: 1, right: 1}, dimBorder: true,
+        title: title || getAILabel(),
+        padding: 0.7,
+        margin: {
+            top: 1, bottom: 0, left: 1, right: 1,
+        },
+        dimBorder: true,
     });
 }
 
 function userMessageBox(message, title = null) {
     return tryBoxen(`${message}`, {
-        title: title || 'User', padding: 0.7, margin: {top: 1, bottom: 0, left: 2, right: 1}, float: 'right', borderColor: 'blue',
+        title: title || 'User',
+        padding: 0.7,
+        margin: {
+            top: 1, bottom: 0, left: 2, right: 1,
+        },
+        float: 'right',
+        borderColor: 'blue',
     });
 }
 
@@ -1144,11 +1156,9 @@ function conversationMessageBox(conversationMessage, messages, index = null) {
     const siblingIndex = getSiblingIndex(messages, conversationMessage.id);
     const aiMessage = Boolean(conversationMessage.role === getAILabel());
     const indexString = index !== null ? `[${index}] ` : '';
-    const childrenString = children.length > 0 ? ` ── !child ` + children.map((child, idx) => `${idx}`).join(' ') : '';
-    const siblingsString = siblings.length > 1 ? ` ── !alt ` + siblings.map((sibling, idx) => { 
-        return idx === siblingIndex ? `[${idx}]` : `${idx}`;
-    }).join(' ') : '';
-    return tryBoxen(conversationMessage.message, {
+    const childrenString = children.length > 0 ? ` ── !fw ${children.map((child, idx) => `${idx}`).join(' ')}` : '';
+    const siblingsString = siblings.length > 1 ? ` ── !alt ${siblings.map((sibling, idx) => (idx === siblingIndex ? `[${idx}]` : `${idx}`)).join(' ')}` : '';
+    return tryBoxen(`${conversationMessage.message}`, {
         title: `${indexString}${conversationMessage.role}${siblingsString}${childrenString}`,
         padding: 0.7,
         margin: {
