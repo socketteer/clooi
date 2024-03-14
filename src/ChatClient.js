@@ -106,9 +106,16 @@ export default class ChatClient {
         // opts.headers['anthropic-version'] = '2023-06-01';
         // opts.headers['anthropic-beta'] = 'messages-2023-12-15';
 
+
         if (modelOptions.stream) {
             // eslint-disable-next-line no-async-promise-executor
             return new Promise(async (resolve, reject) => {
+                abortController.signal.addEventListener('abort', () => {
+                    // clearTimeout(messageTimeout);
+                    // this.constructor.cleanupWebSocketConnection(ws);
+                    reject(new Error('Request aborted'));
+                });
+
                 try {
                     let done = false;
                     await fetchEventSource(url, {
@@ -130,8 +137,8 @@ export default class ChatClient {
                             } catch {
                                 error = error || new Error(`Failed to send message. HTTP ${response.status}`);
                             }
-                            // throw error;
-                            reject(error);
+                            throw error;
+                            // reject(error);
                         },
                         onclose() {
                             if (debug) {
@@ -149,8 +156,8 @@ export default class ChatClient {
                                 console.debug(err);
                             }
                             // rethrow to stop the operation
-                            // throw err;
-                            reject(err);
+                            throw err;
+                            // reject(err);
                         },
                         onmessage(message) {
                             if (debug) {
