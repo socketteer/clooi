@@ -137,7 +137,7 @@ export default {
                 toneStyle: 'creative', // creative, precise, balanced, or fast
                 injectionMethod: 'message', // message or context
                 userMessageInjection: 'Continue the conversation in context. Assistant:',
-                systemMessage: fs.readFileSync('./contexts/youArePrometheus.txt', 'utf8'),
+                systemMessage: '', // fs.readFileSync('./contexts/youArePrometheus.txt', 'utf8'),
                 context: fs.readFileSync('./contexts/context.txt', 'utf8'),
                 censoredMessageInjection: '⚠',
             },
@@ -159,7 +159,7 @@ export default {
                 temperature: 1,
             },
             messageOptions: {
-                systemMessage: fs.readFileSync('./contexts/claudeSystemPrompt.txt', 'utf8'),
+                systemMessage: fs.readFileSync('./contexts/claude-cli.txt', 'utf8'),
             },
         },
     },

@@ -121,7 +121,7 @@ export default class ClaudeClient extends ChatClient {
         let reply = '';
         let result = null;
         if (typeof opts.onProgress === 'function' && this.modelOptions.stream) {
-            await this.getCompletion(
+            result = await this.getCompletion(
                 params,
                 headers,
                 (progressMessage) => {
@@ -141,7 +141,7 @@ export default class ClaudeClient extends ChatClient {
                         opts.onProgress(progressMessage.delta.text);
                         reply += progressMessage.delta.text;
                     } else {
-                        console.debug(progressMessage);
+                        // console.debug(progressMessage);
                     }
                 },
                 opts.abortController || new AbortController(),

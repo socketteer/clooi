@@ -130,7 +130,8 @@ export default class ChatClient {
                             } catch {
                                 error = error || new Error(`Failed to send message. HTTP ${response.status}`);
                             }
-                            throw error;
+                            // throw error;
+                            reject(error);
                         },
                         onclose() {
                             if (debug) {
@@ -139,7 +140,7 @@ export default class ChatClient {
                             // workaround for private API not sending [DONE] event
                             if (!done) {
                                 onProgress('[DONE]');
-                                abortController.abort();
+                                // abortController.abort();
                                 resolve();
                             }
                         },
@@ -148,7 +149,8 @@ export default class ChatClient {
                                 console.debug(err);
                             }
                             // rethrow to stop the operation
-                            throw err;
+                            // throw err;
+                            reject(err);
                         },
                         onmessage(message) {
                             if (debug) {
@@ -159,8 +161,8 @@ export default class ChatClient {
                             }
                             if (message.data === '[DONE]') {
                                 onProgress('[DONE]');
-                                abortController.abort();
-                                resolve();
+                                // abortController.abort();
+                                resolve(message);
                                 done = true;
                                 return;
                             }

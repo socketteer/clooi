@@ -441,32 +441,33 @@ async function onMessage(message) {
             ...conversationData,
             ...clientOptions.messageOptions,
             abortController: controller,
-            onProgress: (token, data) => {
+            onProgress: (diff, data) => {
                 // reply += '#';
-                reply += token;
+                reply += diff;
                 const output = aiMessageBox(reply.trim());
                 spinner.text = `${spinnerPrefix}\n${output}`;
                 eventLog.push(data);
                 responseData = {
-                    response: reply,
+                    textSoFar: reply,
                     eventLog,
                 };
             },
         });
-        responseData = {
-            response,
-            eventLog,
-        };
-        let responseText;
+        // responseData = {
+        //     response,
+        //     eventLog,
+        // };
+        responseData.response = response;
+        // let responseText;
         switch (clientToUse) {
             case 'bing':
-                responseText = response.details.adaptiveCards?.[0]?.body?.[0]?.text?.trim() || response.response;
+                responseData.responseText = response.details.adaptiveCards?.[0]?.body?.[0]?.text?.trim() || response.response;
                 break;
             default:
-                responseText = response.response;
+                responseData.responseText = response.response;
                 break;
         }
-        clipboard.write(responseText).then(() => {}).catch(() => {});
+        // clipboard.write(responseText).then(() => {}).catch(() => {});
         spinner.stop();
         switch (clientToUse) {
             case 'bing':
@@ -1039,7 +1040,7 @@ async function printOrCopyData(action, type = null) {
             data = currentMessage.message;
             break;
         case 'response':
-            data = responseData.response;
+            data = responseData;
             break;
         case 'responseText':
             data = responseData.response?.response || responseData.response;
@@ -1096,19 +1097,19 @@ async function printOrCopyData(action, type = null) {
 
 function logError(message) {
     console.log(tryBoxen(message, {
-        title: 'Error', padding: 0.7, margin: 1, borderColor: 'red',
+        title: 'Error', padding: 0.7, margin: 1, borderColor: 'red', float: 'center',
     }));
 }
 
 function logSuccess(message) {
     console.log(tryBoxen(message, {
-        title: 'Success', padding: 0.7, margin: 1, borderColor: 'green',
+        title: 'Success', padding: 0.7, margin: 1, borderColor: 'green', float: 'center',
     }));
 }
 
 function logWarning(message) {
     console.log(tryBoxen(message, {
-        title: 'Warning', padding: 0.7, margin: 1, borderColor: 'yellow',
+        title: 'Warning', padding: 0.7, margin: 1, borderColor: 'yellow', float: 'center',
     }));
 }
 

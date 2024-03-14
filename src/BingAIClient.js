@@ -7,15 +7,15 @@ import { HttpsProxyAgent } from 'https-proxy-agent';
 import { BingImageCreator } from '@timefox/bic-sydney';
 import ChatClient from './ChatClient.js';
 import { getMessagesForConversation } from './conversation.js';
+import { bingCookie, requestOptions } from './bingConfig.js';
 
 /**
  * https://stackoverflow.com/a/58326357
  * @param {number} size
  */
-const genRanHex = (size) =>
-    [...Array(size)]
-        .map(() => Math.floor(Math.random() * 16).toString(16))
-        .join('');
+const genRanHex = size => [...Array(size)]
+    .map(() => Math.floor(Math.random() * 16).toString(16))
+    .join('');
 
 // this jailbreak is from waylaidwanderer's original code
 // with a pretty cringe interpretation of Sydney
@@ -65,15 +65,14 @@ export default class BingAIClient extends ChatClient {
     }
 
     static getValidIPv4(ip) {
-        const match =
-            !ip ||
-            ip.match(
-                /^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)(\/([0-9]|[1-2][0-9]|3[0-2]))?$/
+        const match = !ip
+            || ip.match(
+                /^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)(\/([0-9]|[1-2][0-9]|3[0-2]))?$/,
             );
         if (match) {
             if (match[5]) {
                 const mask = parseInt(match[5], 10);
-                let [a, b, c, d] = ip.split('.').map((x) => parseInt(x, 10));
+                let [a, b, c, d] = ip.split('.').map(x => parseInt(x, 10));
                 // eslint-disable-next-line no-bitwise
                 const max = (1 << (32 - mask)) - 1;
                 const rand = Math.floor(Math.random() * max);
@@ -112,16 +111,18 @@ export default class BingAIClient extends ChatClient {
             'sec-fetch-site': 'same-origin',
             'sec-ms-gec': genRanHex(64).toUpperCase(),
             'sec-ms-gec-version': '1-115.0.1866.1',
+            // 'sec-websocket-key': '6L+W8WUuesNkqM5CBzd/DQ==',
             'x-ms-client-request-id': crypto.randomUUID(),
             'x-ms-useragent':
                 'azsdk-js-api-client-factory/1.0.0-beta.1 core-rest-pipeline/1.10.0 OS/Win32',
             'user-agent':
                 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/113.0.0.0 Safari/537.36 Edg/113.0.1774.50',
             cookie:
-                this.options.cookies
-                || (this.options.userToken
-                    ? `_U=${this.options.userToken}`
-                    : undefined),
+                bingCookie,
+                // this.options.cookies
+                // || (this.options.userToken
+                //     ? `_U=${this.options.userToken}`
+                //     : undefined),
             Referer: 'https://www.bing.com/search?q=Bing+AI&showconv=1',
             'Referrer-Policy': 'origin-when-cross-origin',
             // Workaround for request being blocked due to geolocation
@@ -133,8 +134,8 @@ export default class BingAIClient extends ChatClient {
         // filter undefined values
         this.headers = Object.fromEntries(
             Object.entries(this.headers).filter(
-                ([, value]) => value !== undefined
-            )
+                ([, value]) => value !== undefined,
+            ),
         );
 
         const fetchOptions = {
@@ -148,20 +149,20 @@ export default class BingAIClient extends ChatClient {
             });
         }
         const response = await fetch(
-            `${this.options.host}/turing/conversation/create?bundleVersion=1.864.15`,
+            // `${this.options.host}/turing/conversation/create?bundleVersion=1.864.15`,
+            `${this.options.host}/turing/conversation/create?bundleVersion=1.1626.5`,
             fetchOptions,
         );
         const body = await response.text();
         try {
             const res = JSON.parse(body);
-            res.encryptedConversationSignature =
-                response.headers.get(
-                    'x-sydney-encryptedconversationsignature',
-                ) ?? null;
+            res.encryptedConversationSignature = response.headers.get(
+                'x-sydney-encryptedconversationsignature',
+            ) ?? null;
             return res;
         } catch (err) {
             throw new Error(
-                `/turing/conversation/create: failed to parse response body.\n${body}`
+                `/turing/conversation/create: failed to parse response body.\n${body}`,
             );
         }
     }
@@ -210,8 +211,8 @@ export default class BingAIClient extends ChatClient {
                     return;
                 }
                 if (
-                    typeof messages[0] === 'object' &&
-                    Object.keys(messages[0]).length === 0
+                    typeof messages[0] === 'object'
+                    && Object.keys(messages[0]).length === 0
                 ) {
                     if (this.debug) {
                         console.debug('handshake established');
@@ -236,6 +237,62 @@ export default class BingAIClient extends ChatClient {
         clearInterval(ws.bingPingInterval);
         ws.close();
         ws.removeAllListeners();
+    }
+
+    static bingRequest(messageText, options) {
+        const {
+            conversationId,
+            clientId,
+            toneStyle = 'creative',
+            encryptedConversationSignature,
+            invocationId = 0,
+            saveMem = false,
+        } = options;
+
+        let tone;
+        if (toneStyle === 'creative') {
+            // toneOption = 'h3imaginative';
+            tone = 'CreativeClassic';
+        } else if (toneStyle === 'precise') {
+            tone = 'h3precise';
+        } else if (toneStyle === 'fast') {
+            // new "Balanced" mode, allegedly GPT-3.5 turbo
+            tone = 'galileo';
+        } else if (toneStyle === 'balanced') {
+            // old "Balanced" mode
+            tone = 'harmonyv3';
+        } else {
+            tone = toneStyle;
+        }
+
+        return {
+            arguments: [
+                {
+                    ...requestOptions(saveMem),
+                    isStartOfSession: invocationId === 0,
+                    traceId: genRanHex(32),
+                    message: {
+                        author: 'user',
+                        text: messageText,
+                        messageType: 'Chat',
+                    },
+                    tone,
+                    extraExtensionParameters: {
+                        'gpt-creator-persona': { personaId: 'copilot' },
+                    },
+                    spokenTextMode: 'None',
+                    encryptedConversationSignature,
+                    conversationId,
+                    participant: {
+                        id: clientId,
+                    },
+                    previousMessages: [],
+                },
+            ],
+            invocationId: invocationId.toString(),
+            target: 'chat',
+            type: 4,
+        };
     }
 
     async sendMessage(message = '', opts = {}) {
@@ -277,8 +334,7 @@ export default class BingAIClient extends ChatClient {
             || !conversationId
             || !clientId
         ) {
-            const createNewConversationResponse =
-                await this.createNewConversation();
+            const createNewConversationResponse = await this.createNewConversation();
             if (this.debug) {
                 console.debug(createNewConversationResponse);
             }
@@ -442,64 +498,14 @@ export default class BingAIClient extends ChatClient {
             abortController.abort();
         });
 
-        let toneOption;
-        if (toneStyle === 'creative') {
-            toneOption = 'h3imaginative';
-        } else if (toneStyle === 'precise') {
-            toneOption = 'h3precise';
-        } else if (toneStyle === 'fast') {
-            // new "Balanced" mode, allegedly GPT-3.5 turbo
-            toneOption = 'galileo';
-        } else if (toneStyle === 'balanced') {
-            // old "Balanced" mode
-            toneOption = 'harmonyv3';
-        } else {
-            toneOption = toneStyle;
-        }
 
-        const obj = {
-            arguments: [
-                {
-                    source: 'cib',
-                    optionsSets: [
-                        'nlu_direct_response_filter',
-                        'deepleo',
-                        'disable_emoji_spoken_text',
-                        'responsible_ai_policy_235',
-                        'enablemm',
-                        toneOption,
-                        'dtappid',
-                        'cricinfo',
-                        'cricinfov2',
-                        'dv3sugg',
-                        'nojbfedge',
-                        ...(toneStyle === 'creative' && this.options.features.genImage
-                            ? ['gencontentv3']
-                            : []),
-                    ],
-                    sliceIds: ['222dtappid', '225cricinfo', '224locals0'],
-                    traceId: genRanHex(32),
-                    isStartOfSession: invocationId === 0,
-                    message: {
-                        author: 'user',
-                        text: userMessageInjection,
-                        // messageType: jailbreakConversationId ? 'SearchQuery' : 'Chat',
-                        // I'm still not sure why waylaidwanderer's original code sets messageType to 'SearchQuery'
-                        // It doesn't seem to make a difference in my tests
-                        messageType: 'Chat',
-                    },
-                    encryptedConversationSignature,
-                    participant: {
-                        id: clientId,
-                    },
-                    conversationId,
-                    previousMessages: [],
-                },
-            ],
-            invocationId: invocationId.toString(),
-            target: 'chat',
-            type: 4, // streaming?
-        };
+        const obj = this.constructor.bingRequest(userMessageInjection, {
+            conversationId,
+            clientId,
+            toneStyle,
+            encryptedConversationSignature,
+            invocationId,
+        });
 
         if (contextInjectionString) {
             obj.arguments[0].previousMessages.push({
@@ -523,7 +529,7 @@ export default class BingAIClient extends ChatClient {
         //     });
         // }
 
-        if (obj.arguments[0].previousMessages.length === 0) {
+        if (obj.arguments[0].previousMessages?.length === 0) {
             delete obj.arguments[0].previousMessages;
         }
 
@@ -533,13 +539,14 @@ export default class BingAIClient extends ChatClient {
 
         const messagePromise = new Promise((resolve, reject) => {
             let replySoFar = '';
+            const internalSearchResults = [];
             let stopTokenFound = false;
 
             const messageTimeout = setTimeout(() => {
                 this.constructor.cleanupWebSocketConnection(ws);
                 reject(
                     new Error(
-                        'Timed out waiting for response. Try enabling debug mode to see more information.'
+                        'Timed out waiting for response. Try enabling debug mode to see more information.',
                     ),
                 );
             }, 500 * 1000);
@@ -575,9 +582,13 @@ export default class BingAIClient extends ChatClient {
                         }
                         const messages = event?.arguments?.[0]?.messages;
                         if (!messages?.length || messages[0].author !== 'bot') {
+                            // console.log('No messages or unexpected author');
+                            // console.log(messages);
                             return;
                         }
                         if (messages[0].contentOrigin === 'Apology') {
+                            console.debug('Apology event');
+                            console.log(messages[0]);
                             return;
                         }
                         if (messages[0]?.contentType === 'IMAGE') {
@@ -601,19 +612,35 @@ export default class BingAIClient extends ChatClient {
                                 });
                             return;
                         }
-                        const updatedText = messages[0].text;
-                        if (!updatedText || updatedText === replySoFar) {
-                            return;
+
+                        let difference = '';
+                        let updatedText = replySoFar;
+
+                        switch (messages[0].messageType) {
+                            case 'InternalSearchResult':
+                                internalSearchResults.push(messages[0]);
+                                // difference = '';
+                                break;
+                            case 'InternalLoaderMessage':
+                            case 'InternalSearchQuery':
+                                difference = `${messages[0].text  }\n`;
+                                break;
+                            case 'RenderCardRequest':
+                                return;
+                            default:
+                                if (!messages[0].text || messages[0].text === replySoFar) {
+                                    return;
+                                }
+                                // get the difference between the current text and the previous text
+                                // check for same prefix
+                                if (messages[0].text.startsWith(replySoFar)) {
+                                    difference = messages[0].text.substring(replySoFar.length);
+                                } else {
+                                    difference = `\n${messages[0].text}`;
+                                }
+                                updatedText = messages[0].text; // should overwrite search traces
                         }
-                        // get the difference between the current text and the previous text
-                        // check for same prefix
-                        let difference;
-                        if (updatedText.startsWith(replySoFar)) {
-                            difference = updatedText.substring(replySoFar.length);
-                        } else {
-                            difference = `\n${updatedText}`;
-                        }
-                        // const difference = updatedText.substring(replySoFar.length) || `\n${updatedText}`;
+
                         onProgress(difference, messages[0]);
                         if (updatedText.trim().endsWith(stopToken)) {
                             stopTokenFound = true;
@@ -632,7 +659,7 @@ export default class BingAIClient extends ChatClient {
                         if (event.item?.result?.value === 'InvalidSession') {
                             reject(
                                 new Error(
-                                    `${event.item.result.value}: ${event.item.result.message}`
+                                    `${event.item.result.value}: ${event.item.result.message}`,
                                 ),
                             );
                             return;
@@ -651,20 +678,20 @@ export default class BingAIClient extends ChatClient {
                                 console.debug(event.item.result.exception);
                             }
                             if (replySoFar && eventMessage) {
-                                eventMessage.adaptiveCards[0].body[0].text =
-                                    replySoFar;
+                                eventMessage.adaptiveCards[0].body[0].text = replySoFar;
                                 eventMessage.text = replySoFar;
                                 resolve({
                                     message: eventMessage,
                                     conversationExpiryTime:
                                         event?.item?.conversationExpiryTime,
+                                    searchResults: internalSearchResults,
                                 });
                                 return;
                             }
                             reject(
                                 new Error(
-                                    `${event.item.result.value}: ${event.item.result.message}`
-                                )
+                                    `${event.item.result.value}: ${event.item.result.message}`,
+                                ),
                             );
                             return;
                         }
@@ -724,6 +751,7 @@ export default class BingAIClient extends ChatClient {
                             message: eventMessage,
                             conversationExpiryTime:
                                 event?.item?.conversationExpiryTime,
+                            searchResults: internalSearchResults,
                         });
                         // eslint-disable-next-line no-useless-return
                         return;
@@ -759,13 +787,14 @@ export default class BingAIClient extends ChatClient {
         }
         ws.send(`${messageJson}`);
 
-        const { message: reply, conversationExpiryTime } = await messagePromise;
+        const { message: reply, conversationExpiryTime, searchResults } = await messagePromise;
 
         const replyMessage = this.createConversationMessage(
             {
                 author: 'bot',
                 text: reply.text,
                 details: reply,
+                searchResults,
             },
             userConversationMessage
                 ? userConversationMessage.id
@@ -784,6 +813,7 @@ export default class BingAIClient extends ChatClient {
             conversationExpiryTime,
             response: reply.text,
             details: reply,
+            searchResults,
         };
 
         if (jailbreakConversationId) {
