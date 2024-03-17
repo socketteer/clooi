@@ -163,7 +163,7 @@ let availableCommands = [
         name: '!gen - Generate response',
         value: '!gen',
         usage: '!gen',
-        description: 'Generate a response.',
+        description: 'Generate a response without sending an additional user message',
         command: async () => generateMessage(),
     },
     {
@@ -388,8 +388,11 @@ async function showCommandDocumentation(command) {
         }
         printDocString(commandObj);
     } else {
+        console.log('Available commands:');
         for (const commandObj of availableCommands) {
-            printDocString(commandObj);
+            console.log(`\n${commandObj.usage}\n`);
+
+            // printDocString(commandObj);
         }
     }
     return conversation();
