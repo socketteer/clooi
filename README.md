@@ -32,63 +32,69 @@ Running the app will prompt you to enter a message.
 
 You can also enter commands (prepended with `!`). Entering `!` will show the list of currently available commands. 
 
+The `!help` command will show a list of commands and their descriptions. You can also use `!help [command]` or `<command> --help` to get more information about a specific command.
+
 <details>
-<summary><strong>Show/hide all CLooI commands</strong></summary>
+<summary><strong>Show/hide CLooI command descriptions</strong></summary>
 
-#### generation
+- !help [command] | <command> --help: Show command documentation.
+    - [command]: If provided, show the documentation for that command, otherwise shows documentation for all commands.
 
-- `!mu`: Regenerate the last response
-- `!gen`: Generate a response (without sending a user message)
+- !mu: Regenerate the last response. Equivalent to running !rw -1 and then !gen.
 
-#### saving/loading
+- !gen: Generate a response without sending an additional user message
 
-- `!save [NAME]`: Save conversation state. 
-    - `[NAME]`: name to save the conversation state with. If not provided, shows a prompt to enter a name.
-- `!load [NAME]`: Load conversation state.
-    - `[NAME]`: name of the conversation state to load. If not provided, shows a prompt to select a conversation state to load.
-- `!resume`: Resume last conversation
-- `!new`: Start new conversation
-- `!open ID`: Load a saved conversation by id.
-    - `ID`: id of the conversation state to load.
+- !save [name]: Save a named pointer to the current conversation state
+    - [name]: If a name is provided, it will save the state with that name, otherwise a prompt will appear.
 
-#### navigation
+- !load [name]: Load a saved conversation state.
+    - [name]: If a name is provided, it will load the state with that name, otherwise a prompt will appear showing saved states.
 
-- `!rw [INDEX]`: Rewind conversation to a previous message. 
-    - `[INDEX]`: index of the message to rewind to (if positive), or the number of messages to rewind (if negative). If not provided, shows a prompt to select a message to rewind to.
-- `!fw [INDEX]`: Navigate to a child message. 
-    - `[INDEX]`: index of the child message to navigate to. (default: 0)
-- `!alt [INDEX]`: Navigate to an alternate message. 
-    - `[INDEX]`: index of the alternate (sibling) message to navigate to. If not provided, shows a prompt to select an alternate message.
-- `!>`: Navigate to the next sibling message
-- `!<`: Navigate to the previous sibling message
+- !new: Start a new conversation.
 
-#### information
+- !rw [index]: Rewind to a previous message.
+    - [index]: If positive, rewind to message with that index. If negative, go that many steps backwards from the current index. If not provided, a prompt will appear to choose where in conversation history to rewind to.
 
-**note**: `!cp .` and `!pr .` copies/prints the text of the last message in the conversation.
+- !fw [index]: Go forward to a child message.
+    - [index]: If positive, go to the child message with that index. If 0, go to the first child message. If not provided, a prompt will appear to choose which child message to go to.
 
-- `!cp [TYPE]`: Copy data to clipboard. 
-    - `[TYPE]`: type of data to copy. If not provided, shows a prompt to select the type of data to copy.
-- `!pr [TYPE]`: Print data to console.
-    - `[TYPE]`: type of data to print. If not provided, shows a prompt to select the type of data to print.
-- `!history`: Show conversation history in console
+- !alt [index]: Go to a sibling message.
+    - [index]: Index of sibling message. If not provided a prompt will appear to choose which sibling message to go to.
 
-#### editing
+- !w: Navigate to the parent message. Equivalent to running !rw -1.
 
-- `!ml`: Open the editor (for multi-line messages)
-- `!edit`: Edit and fork the current message
-- `!concat [MESSAGE]`: Concatenate a message or messages to the conversation without triggering a response.
-    - `[MESSAGE]`: the message to add. If not provided, shows a prompt to enter a message or message history transcript.
+- !>: Go right / to the next sibling.
 
-### other
+- !<: Go left / to the previous sibling.
 
-- `!set [OPTION] [VALUE]`: Set an option
-    - `[OPTION]`: option to set
-    - `[VALUE]`: value to set the option to
-    - If not provided, shows a prompt to select an option to set.
-- `!reload`: Reload settings
-- `!delete-all`: Delete all conversations
-- `!exit`: Exit CLooI
-- `!debug`: Run debug command
+- !cp [type]: Copy data to clipboard.
+    - [type]: If provided, copy the data of that type. If not provided, a prompt will appear to choose which data to copy.
+
+- !pr [type]: Print data to console.
+    - [type]: If provided, print the data of that type. If not provided, a prompt will appear to choose which data to print.
+
+- !ml: Open the editor (for multi-line messages). When changes are saved and the editor is closed, the message will be sent.
+
+- !edit: Opens the text of the current message in the editor. If you make changes and save, a copy of the message (with the same author and type) will be created as a sibling message.
+
+- !concat [message]: Concatenate message(s) to the conversation.
+    - [message]: If provided, concatenate the message as a user message. If not provided, the editor will open, and you write either a single message or multiple messages in the standard transcript format.
+
+- !merge: Creates a new sibling of the parent message with the last message's text appended to the parent message's text, and which inherits other properties of the parent like author.
+
+- !history: Display conversation history in formatted boxes. If you want to copy the raw conversation history transcript, use !cp history or !pr history instead.
+
+- !exit: Exit CLooI.
+
+- !resume: Resume the last conversation.
+
+- !export [filename]: Export conversation tree to JSON.
+    - [filename]: If provided, export the conversation tree to a file with that name, otherwise a prompt will appear to choose a filename.
+
+- !open <id\>: Load a saved conversation by id.
+    - <id\>: The id of the conversation to load.
+
+- !debug: Run debug command.
 
 ---
 
@@ -112,11 +118,17 @@ You can also enter commands (prepended with `!`). Entering `!` will show the lis
 
 The default options for the CLI app are stored in `settings.js`, under `cliOptions`. You can change the default options by modifying this file. These options will load by default when you run the CLI app or when you run the `!reload` command.
 
-The system prompt (passed as a request parameter for Claude, prepended to prompt for Infrastruct, injected after Bing's normal system prompt) defaults are stored in `./contexts/claudeSystemPrompt.txt` (for Claude), `contexts/systemPrompt.txt` (for Bing) and `contexts/infrastruct.txt` (for Infrastruct). You can change these files to change the default system prompt and context, or set different strings or point to different files in `settings.js`. The `contexts/` folder also contains alternative system prompts.
+The system prompt (passed as a request parameter for Claude, prepended to prompt for Infrastruct, injected after Bing's normal system prompt) defaults are stored in text files in `contexts/` specified separately for each client in `settings.js/cliOptions`. You can change the content of the files to change the default system prompt and context, or point to different files in `settings.js`, or write the desired system prompt string directly in `settings.js`. The `contexts/` folder also contains alternative system prompts.
 
-### Problems
+### Saving and loading conversation states
 
-- reloading settings doesn't update settings if files have changed. If you want to load new settings, you need to restart the app. (`!exit` and then `npm run cli`, then `!resume` to continue the conversation)
+All messages are saved in `cache.json`, but you can save a named pointer to a specific conversation state using the `!save` command. You can then load the conversation state at that point using the `!load` command.
+
+### Continuing messages (Claude)
+
+Claude can continue messages from the last Claude message in the conversation, treating the context as continuous, if you use the `!gen` command. 
+
+However, the Anthropic API will reject conversations that have more than one Claude (or User) message in a row. So after using `!gen`, to continue the conversation, you must use `!merge` to merge the second Claude message with the first.
 
 ## BingAIClient
 

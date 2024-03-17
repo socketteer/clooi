@@ -148,7 +148,7 @@ let availableCommands = [
         name: '!help - Show command documentation',
         value: '!help',
         usage: '!help [command] | <command> --help',
-        description: 'Show command documentation.\n\nOptions:\n\t[command]: If provided, show the documentation for that command, otherwise shows documentation for all commands.',
+        description: 'Show command documentation.\n\t[command]: If provided, show the documentation for that command, otherwise shows documentation for all commands.',
         command: async args => showCommandDocumentation(args[1]),
     },
     {
@@ -170,14 +170,14 @@ let availableCommands = [
         name: '!save - Save conversation state',
         value: '!save',
         usage: '!save [name]',
-        description: 'Save a named pointer to the current conversation state\n\nOptions:\n\t[name]: If a name is provided, it will save the state with that name, otherwise a prompt will appear.',
+        description: 'Save a named pointer to the current conversation state\n\t[name]: If a name is provided, it will save the state with that name, otherwise a prompt will appear.',
         command: async args => saveConversationState(args[1]),
     },
     {
         name: '!load - Load conversation state',
         value: '!load',
         usage: '!load [name]',
-        description: 'Load a saved conversation state.\n\nOptions:\n\t[name]: If a name is provided, it will load the state with that name, otherwise a prompt will appear showing saved states.',
+        description: 'Load a saved conversation state.\n\t[name]: If a name is provided, it will load the state with that name, otherwise a prompt will appear showing saved states.',
         command: async args => loadSavedState(args[1]),
     },
 
@@ -192,7 +192,7 @@ let availableCommands = [
         name: '!rw - Rewind to a previous message',
         value: '!rw',
         usage: '!rw [index]',
-        description: 'Rewind to a previous message.\n\nOptions:\n\t[index]: If positive, rewind to message with that index. If negative, go that many steps backwards from the current index. If not provided, a prompt will appear to choose where in conversation history to rewind to.',
+        description: 'Rewind to a previous message.\n\t[index]: If positive, rewind to message with that index. If negative, go that many steps backwards from the current index. If not provided, a prompt will appear to choose where in conversation history to rewind to.',
         available: async () => Boolean(conversationData.parentMessageId),
         command: async args => rewind(args[1] ? parseInt(args[1], 10) : null),
     },
@@ -200,7 +200,7 @@ let availableCommands = [
         name: '!fw - Go forward to a child message',
         value: '!fw',
         usage: '!fw [index]',
-        description: 'Go forward to a child message.\n\nOptions:\n\t[index]: If positive, go to the child message with that index. If 0, go to the first child message. If not provided, a prompt will appear to choose which child message to go to.',
+        description: 'Go forward to a child message.\n\t[index]: If positive, go to the child message with that index. If 0, go to the first child message. If not provided, a prompt will appear to choose which child message to go to.',
         available: hasChildren,
         command: async args => selectChildMessage(args[1] ? parseInt(args[1], 10) : null),
     },
@@ -208,7 +208,7 @@ let availableCommands = [
         name: '!alt - Go to a sibling message',
         value: '!alt',
         usage: '!alt [index]',
-        description: 'Go to a sibling message.\n\nOptions:\n\t[index]: Index of sibling message. If not provided a prompt will appear to choose which sibling message to go to.',
+        description: 'Go to a sibling message.\n\t[index]: Index of sibling message. If not provided a prompt will appear to choose which sibling message to go to.',
         available: hasSiblings,
         command: async args => selectSiblingMessage(args[1] ? parseInt(args[1], 10) : null),
     },
@@ -251,14 +251,14 @@ let availableCommands = [
         name: '!cp - Copy data to clipboard',
         value: '!cp',
         usage: '!cp [type]',
-        description: 'Copy data to clipboard.\n\nOptions:\n\t[type]: If provided, copy the data of that type. If not provided, a prompt will appear to choose which data to copy.',
+        description: 'Copy data to clipboard.\n\t[type]: If provided, copy the data of that type. If not provided, a prompt will appear to choose which data to copy.',
         command: async args => printOrCopyData('copy', args[1]),
     },
     {
         name: '!pr - Print data to console',
         value: '!pr',
         usage: '!pr [type]',
-        description: 'Print data to console.\n\nOptions:\n\t[type]: If provided, print the data of that type. If not provided, a prompt will appear to choose which data to print.',
+        description: 'Print data to console.\n\t[type]: If provided, print the data of that type. If not provided, a prompt will appear to choose which data to print.',
         command: async args => printOrCopyData('print', args[1]),
     },
     {
@@ -280,7 +280,7 @@ let availableCommands = [
         name: '!concat - Concatenate message(s) to the conversation',
         value: '!concat',
         usage: '!concat [message]',
-        description: 'Concatenate message(s) to the conversation.\n\nOptions:\n\t[message]: If provided, concatenate the message as a user message. If not provided, the editor will open, and you write either a single message or multiple messages in the standard transcript format.',
+        description: 'Concatenate message(s) to the conversation.\n\t[message]: If provided, concatenate the message as a user message. If not provided, the editor will open, and you write either a single message or multiple messages in the standard transcript format.',
         command: async args => addMessages(args[1]),
     },
     {
@@ -321,7 +321,7 @@ let availableCommands = [
         name: '!export - Export conversation tree to JSON',
         value: '!export',
         usage: '!export [filename]',
-        description: 'Export conversation tree to JSON.\n\nOptions:\n\t[filename]: If provided, export the conversation tree to a file with that name, otherwise a prompt will appear to choose a filename.',
+        description: 'Export conversation tree to JSON.\n\t[filename]: If provided, export the conversation tree to a file with that name, otherwise a prompt will appear to choose a filename.',
         available: async () => Boolean(getConversationId()),
         command: async args => exportConversation(args[1]),
     },
@@ -333,7 +333,7 @@ let availableCommands = [
         name: '!open - Load a saved conversation by id',
         value: '!open',
         usage: '!open <id>',
-        description: 'Load a saved conversation by id.\n\nOptions:\n\t<id>: The id of the conversation to load.',
+        description: 'Load a saved conversation by id.\n\t<id>: The id of the conversation to load.',
         command: async args => loadConversation(args[1]),
     },
     // {
@@ -375,8 +375,7 @@ await loadSettings();
 // await conversation();
 
 function printDocString(commandObj) {
-    console.log(`\n${commandObj.usage}\n`);
-    console.log(`${commandObj.description}\n`);
+    console.log(`\n${commandObj.usage}: ${commandObj.description}`);
 }
 
 async function showCommandDocumentation(command) {
@@ -388,11 +387,10 @@ async function showCommandDocumentation(command) {
         }
         printDocString(commandObj);
     } else {
-        console.log('Available commands:');
+        // console.log('Commands:\n');
         for (const commandObj of availableCommands) {
-            console.log(`\n${commandObj.usage}\n`);
-
-            // printDocString(commandObj);
+            // console.log(`\n${commandObj.usage}\n`);
+            printDocString(commandObj);
         }
     }
     return conversation();
