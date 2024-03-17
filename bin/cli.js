@@ -17,6 +17,7 @@ import {
     getChildren,
     getSiblings,
     getSiblingIndex,
+    getParent,
 } from '../src/conversation.js';
 
 const arg = process.argv.find(_arg => _arg.startsWith('--settings'));
@@ -281,6 +282,14 @@ let availableCommands = [
         usage: '!concat [message]',
         description: 'Concatenate message(s) to the conversation.\n\nOptions:\n\t[message]: If provided, concatenate the message as a user message. If not provided, the editor will open, and you write either a single message or multiple messages in the standard transcript format.',
         command: async args => addMessages(args[1]),
+    },
+    {
+        name: '!merge - Merge the last message up into the parent message',
+        value: '!merge',
+        usage: '!merge',
+        description: 'Creates a new sibling of the parent message with the last message\'s text appended to the parent message\'s text, and which inherits other properties of the parent like author.',
+        available: async () => Boolean(conversationData.parentMessageId),
+        command: async () => mergeUp(),
     },
     {
         name: '!history - Show conversation history',
@@ -709,6 +718,9 @@ async function addMessages(newMessages = null) {
     return showHistory();
 }
 
+
+    
+
 async function setOptions(key = null, value = null) {
     // todo save old value see if changed
     if (!key) {
@@ -802,6 +814,26 @@ async function editMessage(messageId) {
     logSuccess(`Cloned and edited message ${messageId}.`);
 
     return selectMessage(editedMessage.id);
+}
+
+async function mergeUp() {
+    const messages = await conversationMessages();
+    const currentMessage = await getCurrentMessage();
+    const parentMessage = getParent(messages, currentMessage.id);
+    if (!parentMessage) {
+        logWarning('No parent message.');
+        return conversation();
+    }
+    const newMessage = {
+        ...parentMessage,
+        message: `${parentMessage.message}${currentMessage.message}`,
+        id: crypto.randomUUID(),
+    };
+    const convoTree = await client.conversationsCache.get(getConversationId());
+    convoTree.messages.push(newMessage);
+    await client.conversationsCache.set(getConversationId(), convoTree);
+    logSuccess(`Merged message ${currentMessage.id} into parent message ${parentMessage.id} and created new message ${newMessage.id}.`);
+    return selectMessage(newMessage.id);
 }
 
 async function saveConversationState(name = null, data = conversationData) {
