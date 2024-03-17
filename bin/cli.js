@@ -169,7 +169,7 @@ let availableCommands = [
         name: '!save - Save conversation state',
         value: '!save',
         usage: '!save [name]',
-        description: 'Save the current conversation state\n\nOptions:\n\t[name]: If a name is provided, it will save the state with that name, otherwise a prompt will appear.',
+        description: 'Save a named pointer to the current conversation state\n\nOptions:\n\t[name]: If a name is provided, it will save the state with that name, otherwise a prompt will appear.',
         command: async args => saveConversationState(args[1]),
     },
     {
@@ -193,7 +193,7 @@ let availableCommands = [
         usage: '!rw [index]',
         description: 'Rewind to a previous message.\n\nOptions:\n\t[index]: If positive, rewind to message with that index. If negative, go that many steps backwards from the current index. If not provided, a prompt will appear to choose where in conversation history to rewind to.',
         available: async () => Boolean(conversationData.parentMessageId),
-        command: async args => rewindTo(args[1] ? parseInt(args[1], 10) : null),
+        command: async args => rewind(args[1] ? parseInt(args[1], 10) : null),
     },
     {
         name: '!fw - Go forward to a child message',
@@ -469,7 +469,6 @@ async function generateMessage(message = null) {
             ...clientOptions.messageOptions,
             abortController: controller,
             onProgress: (diff, data) => {
-                // reply += '#';
                 reply += diff;
                 const output = aiMessageBox(reply.trim());
                 spinner.text = `${spinnerPrefix}\n${output}`;
@@ -567,26 +566,29 @@ async function rewindTo(index) {
     return selectMessage(conversationMessage.id);
 }
 
-async function rewindPrompt() {
+async function rewind(idx) {
     const messageHistory = await getHistory();
     if (!messageHistory || messageHistory.length < 2) {
         return conversation();
     }
-    const choices = messageHistory.map((conversationMessage, index) => ({
-        name: `[${index}] ${conversationMessage.role}: ${conversationMessage.message.slice(0, 200) + (conversationMessage.message.length > 200 ? '...' : '')}`,
-        value: index,
-    }));
-    const { index } = await inquirer.prompt([
-        {
-            type: 'list',
-            name: 'index',
-            message: 'Select a message to rewind to:',
-            choices,
-            default: choices.length - 1,
-            loop: false,
-        },
-    ]);
-    return rewindTo(index);
+    if (!idx) {
+        const choices = messageHistory.map((conversationMessage, index) => ({
+            name: `[${index}] ${conversationMessage.role}: ${conversationMessage.message.slice(0, 200) + (conversationMessage.message.length > 200 ? '...' : '')}`,
+            value: index,
+        }));
+        const { index } = await inquirer.prompt([
+            {
+                type: 'list',
+                name: 'index',
+                message: 'Select a message to rewind to:',
+                choices,
+                default: choices.length - 1,
+                loop: false,
+            },
+        ]);
+        idx = index;
+    }
+    return rewindTo(idx);
 }
 
 async function selectMessage(messageId) {
