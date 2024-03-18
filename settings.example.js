@@ -78,6 +78,16 @@ export default {
             stream: true,
         },
     },
+    ollamaClient: {
+        modelOptions: {
+            model: 'OpenHermes-2.5:Q5_K_M',
+            options: {
+                num_ctx: 4096,
+                temperature: 1,
+            },
+            stream: true,
+        },
+    },
     chatGptBrowserClient: {
         // (Optional) Support for a reverse proxy for the conversation endpoint (private API server).
         // Warning: This will expose your access token to a third party. Consider the risks before using this.
@@ -160,6 +170,19 @@ export default {
             },
             messageOptions: {
                 systemMessage: fs.readFileSync('./contexts/claude-cli.txt', 'utf8'),
+            },
+        },
+        ollamaOptions: {
+            modelOptions: {
+                model: 'OpenHermes-2.5:Q5_K_M',
+                options: {
+                    num_ctx: 4096,
+                    num_predict: 128,
+                    temperature: 1,
+                },
+            },
+            messageOptions: {
+                systemMessage: fs.readFileSync('./contexts/context.txt', 'utf8'),
             },
         },
     },

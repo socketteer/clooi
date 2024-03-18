@@ -19,13 +19,14 @@ export default class OllamaClient extends ChatClient {
         this.completionsUrl = 'http://127.0.0.1:11434/api/chat';
         this.modelOptions = {
             // set some good defaults (check for undefined in some cases because they may be 0)
-            model: 'mistral-7b:Q5_K_M',
+            model: 'OpenHermes-2.5:Q5_K_M',
             options: {
                 //see PARAMS in ollama Modelfile docs
                 num_ctx: 4096,
-                temperature: 1
+                temperature: 1,
+                // template should be defined in the ollama Modelfile
             },
-            //templating is model specific and should be specified in the model file if necessary
+            // system param is not present in chat endpoint...
             stream: true,
         };
         this.setOptions(options);
@@ -67,7 +68,7 @@ export default class OllamaClient extends ChatClient {
               done = true;
             } else {
               const chunk = new TextDecoder().decode(value);
-              console.log('Received chunk:', chunk);
+              // console.log('Received chunk:', chunk);
               const lines = chunk.split('\n');
       
               for (const line of lines) {
@@ -75,7 +76,7 @@ export default class OllamaClient extends ChatClient {
                   continue;
                 }
 
-                console.log('Processing line:', line);
+                // console.log('Processing line:', line);
       
                 const data = JSON.parse(line);
                 if (data.done) {
@@ -132,6 +133,9 @@ export default class OllamaClient extends ChatClient {
             parentMessageId,
         ).map(msg => this.toBasicMessage(msg));
 
+        const preparedMessages = this.addSystemMessage(previousCachedMessages, systemMessage);
+
+
         parentMessageId = parentMessageId || previousCachedMessages[conversation.messages.length - 1]?.id || crypto.randomUUID();
         let userMessage;
         let userConversationMessage;
@@ -154,20 +158,17 @@ export default class OllamaClient extends ChatClient {
             };
 
             conversation.messages.push(userConversationMessage);
-            previousCachedMessages.push(userMessage);
+            // previousCachedMessages.push(userMessage);
+            preparedMessages.push(userMessage);
 
             await this.conversationsCache.set(conversationId, conversation);
         }
 
         const params = {
-            messages: previousCachedMessages,
-            //system: systemMessage,
+            // messages: previousCachedMessages,
+            messages: preparedMessages,
+            // system: systemMessage,
         };
-        // const headers = {
-        //     'x-api-key': this.apiKey,
-        //     'anthropic-version': '2023-06-01',
-        //     'anthropic-beta': 'messages-2023-12-15',
-        // };
 
         let reply = '';
         let result = null;
@@ -187,7 +188,7 @@ export default class OllamaClient extends ChatClient {
                 opts.abortController || new AbortController(),
             );
             if (this.options.debug) {
-                console.debug(JSON.stringify(result));
+                // console.debug(JSON.stringify(result));
             }
             reply = result.message.content;
         }
@@ -231,4 +232,14 @@ export default class OllamaClient extends ChatClient {
         const messageType = message.type || this.participants[message.author]?.defaultMessageType || 'message';
         return `[${name}](#${messageType})\n${message.content}`;
     }
+
+    addSystemMessage(messages, systemMessage) {
+      if (messages.length === 0 && systemMessage) {
+          messages.unshift({
+              role: 'system',
+              content: systemMessage,
+          });
+      }
+      return messages;
+  }
 }
