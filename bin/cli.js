@@ -12,6 +12,7 @@ import ChatGPTClient from '../src/ChatGPTClient.js';
 import BingAIClient from '../src/BingAIClient.js';
 import InfrastructClient from '../src/InfrastructClient.js';
 import ClaudeClient from '../src/ClaudeClient.js';
+import OllamaClient from '../src/OllamaClient.js';
 import {
     getMessagesForConversation,
     getChildren,
@@ -101,6 +102,18 @@ async function loadSettings() {
             };
             client = new ClaudeClient(
                 settings.anthropicApiKey || settings.claudeClient.anthropicApiKey,
+                {
+                    ...clientOptions,
+                    cache: settings.cacheOptions,
+                },
+            );
+            break;
+        case 'ollama':
+            clientOptions = {
+                ...settings.ollamaClient,
+                ...settings.cliOptions.ollamaOptions,
+            };
+            client = new OllamaClient(
                 {
                     ...clientOptions,
                     cache: settings.cacheOptions,
@@ -1278,6 +1291,8 @@ function getAILabel() {
             return 'Infrastruct'; // settings.infrastructClient?.participants?.ai?.display || 'Infrastruct';
         case 'claude':
             return 'Claude'; // settings.claudeClient?.participants?.ai?.display || 'Claude';
+        case 'ollama':
+            return 'Ollama'; // settings.ollamaClient?.participants?.ai?.display || 'Ollama';
         default:
             return settings.chatGptClient?.chatGptLabel || 'ChatGPT';
     }
