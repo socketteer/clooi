@@ -2,6 +2,7 @@
 import fs from 'fs';
 import { pathToFileURL } from 'url';
 import { KeyvFile } from 'keyv-file';
+import { spawn } from 'child_process';
 import boxen from 'boxen';
 import ora from 'ora';
 import clipboard from 'clipboardy';
@@ -733,7 +734,7 @@ async function addMessages(newMessages = null) {
 }
 
 
-    
+
 
 async function setOptions(key = null, value = null) {
     // todo save old value see if changed
@@ -1158,11 +1159,23 @@ async function printOrCopyData(action, type = null) {
     }
     if (action === 'copy') {
         try {
-            if (typeof data === 'string') {
-                await clipboard.write(data);
+            const dataString = typeof data === 'string' ? data : JSON.stringify(data, null, 2);
+
+            if (process.platform === 'linux' && process.env.XDG_SESSION_TYPE === 'wayland') {
+                const wlCopy = spawn('wl-copy', { stdio: 'pipe' });
+                wlCopy.stdin.write(dataString);
+                wlCopy.stdin.end();
+                wlCopy.on('close', (code) => {
+                    if (code === 0) {
+                        logSuccess(`Copied ${type} to clipboard.`);
+                    } else {
+                        logError(`Failed to copy ${type}. Exit code: ${code}`);
+                    }
+                });
             } else {
-                await clipboard.write(JSON.stringify(data, null, 2));
+                await clipboard.write(dataString);
             }
+
             logSuccess(`Copied ${type} to clipboard.`);
         } catch (error) {
             logError(error?.message || error);
