@@ -779,12 +779,6 @@ async function addMessages(newMessages = null) {
     return conversation();
 }
 
-<<<<<<< HEAD
-
-
-
-=======
->>>>>>> 152ad8c (add xml parsing and tests)
 async function setOptions(key = null, value = null) {
     // todo save old value see if changed
     if (!key) {
