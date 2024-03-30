@@ -12,7 +12,8 @@ export default class ClaudeClient extends ChatClient {
             bot: {
                 display: 'Claude',
                 author: 'assistant',
-                transcript: 'assistant',
+                // transcript: 'assistant',
+                // xml: 'assistant',
                 defaultMessageType: 'message',
             },
         });
@@ -21,17 +22,10 @@ export default class ClaudeClient extends ChatClient {
         this.modelOptions = {
             // set some good defaults (check for undefined in some cases because they may be 0)
             model: 'claude-3-opus-20240229',
-            max_tokens: 1024,
+            max_tokens: 4096,
             temperature: 1,
             stream: true,
         };
-
-
-        // const anthropic = require('@anthropic-ai/sdk');
-
-        // const client = new anthropic.Client({
-        //     apiKey: this.apiKey,
-        // });
 
         this.setOptions(options);
     }
@@ -79,7 +73,7 @@ export default class ClaudeClient extends ChatClient {
         const previousCachedMessages = getMessagesForConversation(
             conversation.messages,
             parentMessageId,
-        ).map(msg => this.toBasicMessage(msg));
+        ).map(msg => this.toApiMessage(msg));
 
         parentMessageId = parentMessageId || previousCachedMessages[conversation.messages.length - 1]?.id || crypto.randomUUID();
         let userMessage;
@@ -112,6 +106,7 @@ export default class ClaudeClient extends ChatClient {
             messages: previousCachedMessages,
             system: systemMessage,
         };
+        // console.log(params);
         const headers = {
             'x-api-key': this.apiKey,
             'anthropic-version': '2023-06-01',
@@ -184,17 +179,11 @@ export default class ClaudeClient extends ChatClient {
         };
     }
 
-    toBasicMessage(conversationMessage) {
+    toApiMessage(conversationMessage) {
         const role = this.convertAlias('display', 'author', conversationMessage.role);
         return {
             content: conversationMessage.message,
             role,
         };
-    }
-
-    toTranscriptMessage(message) {
-        const name = this.convertAlias('author', 'transcript', message.role);
-        const messageType = message.type || this.participants[message.author]?.defaultMessageType || 'message';
-        return `[${name}](#${messageType})\n${message.content}`;
     }
 }

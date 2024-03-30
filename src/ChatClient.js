@@ -3,25 +3,30 @@ import crypto from 'crypto';
 import Keyv from 'keyv';
 import { fetchEventSource } from '@waylaidwanderer/fetch-event-source';
 import { Agent } from 'undici';
+import * as conversions from './typeConversionUtil.js';
+// import { isValidXML } from './typeConversionUtil.js';
 
 const defaultParticipants = {
     user: {
         display: 'User',
         author: 'user',
-        transcript: 'user',
+        // transcript: 'user',
+        // xml: 'user',
         defaultMessageType: 'message',
     },
     bot: {
         display: 'Assistant',
-        author: 'bot',
-        transcript: 'assistant',
+        author: 'assistant',
+        // transcript: 'assistant',
+        // xml: 'assistant',
         defaultMessageType: 'message',
     },
     system: {
         display: 'System',
         author: 'system',
-        transcript: 'system',
-        defaultMessageType: 'additional_instructions',
+        // transcript: 'system',
+        // xml: 'system',
+        defaultMessageType: 'message',
     },
 };
 
@@ -105,7 +110,6 @@ export default class ChatClient {
         // opts.headers['x-api-key'] = this.apiKey;
         // opts.headers['anthropic-version'] = '2023-06-01';
         // opts.headers['anthropic-beta'] = 'messages-2023-12-15';
-
 
         if (modelOptions.stream) {
             // eslint-disable-next-line no-async-promise-executor
@@ -237,72 +241,22 @@ export default class ChatClient {
         };
     }
 
-    toTranscriptMessage(message) {
-        const name = this.convertAlias('author', 'transcript', message.author);
-        const messageType = message.type || this.participants[message.author]?.defaultMessageType || 'message';
-        return `[${name}](#${messageType})\n${message.text}`;
-    }
-
-    toTranscript(messageHistory) {
-        // if (!('author' in messageHistory[0])) {
-        //     messageHistory = messageHistory.map(
-        //         message => this.toBasicMessage(message),
-        //     );
-        // }
-        switch (this.getDataType(messageHistory)) {
-            case 'messageHistory':
-                return messageHistory;
-            case 'basicMessage':
-                return this.toTranscriptMessage(messageHistory);
-            case 'conversationMessage':
-                return this.toTranscriptMessage(this.toBasicMessage(messageHistory));
-            case '[basicMessage]':
-                break;
-            case '[conversationMessage]':
-                messageHistory = messageHistory.map(
-                    message => this.toBasicMessage(message),
-                );
-                break;
-            case 'string':
-                return messageHistory;
+    toMessages(history) {
+        switch (conversions.getDataType(history)) {
+            case '[basicMessage]': return history;
+            case 'transcript': return conversions.parseTranscript(history);
+            case 'xml': return conversions.parseXml(history);
+            case 'basicMessage': return [history];
+            case 'conversationMessage': return [this.toBasicMessage(history)];
+            case '[conversationMessage]': return history.map(message => this.toBasicMessage(message));
+            case 'string': return [{ text: history, author: this.participants.user.author }];
             default:
-                return '';
+                throw new Error('Invalid history data type'); // return null;
         }
-        return messageHistory?.map(msg => this.toTranscriptMessage(msg)).join('\n\n');
     }
 
-    parseHistoryString(historyString) {
-        // header format is '[${author}](#{messageType})'
-        const headerRegex = /\[.+?\]\(#.+?\)/g;
-        const authorRegex = /\[(.+?)]/;
-        const messageTypeRegex = /\(#(.+?)\)/;
-        let match;
-        const messages = [];
-        const headerStartIndices = [];
-        const headers = [];
-        while ((match = headerRegex.exec(historyString))) {
-            headerStartIndices.push(match.index);
-            headers.push(match[0]);
-        }
-        for (let i = 0; i < headerStartIndices.length; i++) {
-            const start = headerStartIndices[i];
-            const messageStart = start + headers[i].length;
-            const messageEnd = headerStartIndices[i + 1] || historyString.length;
-            const messageText = historyString
-                .substring(messageStart, messageEnd)
-                .trim();
-            const authorString = authorRegex.exec(headers[i])[1];
-            const messageTypeString = messageTypeRegex.exec(headers[i])[1];
-            const author = this.convertAlias('transcript', 'author', authorString);
-
-            messages.push({
-                author,
-                text: messageText,
-                type: messageTypeString,
-            });
-        }
-
-        return messages;
+    toTranscript(history) {
+        return conversions.toTranscript(this.toMessages(history));
     }
 
     createConversationMessage(message, parentMessageId) {
@@ -318,22 +272,7 @@ export default class ChatClient {
     }
 
     createConversationMessages(messages, rootMessageId) {
-        switch (this.getDataType(messages)) {
-            case 'messageHistory':
-                messages = this.parseHistoryString(messages);
-                break;
-            case 'string':
-                messages = [{ text: messages, author: this.participants.user.author }];
-                break;
-            case '[basicMessage]':
-                break;
-            case '[conversationMessage]':
-                console.warn('Conversation messages are already in conversation message format');
-                messages = messages.map(message => this.toBasicMessage(message));
-                break;
-            default:
-                throw new Error('Invalid message data type');
-        }
+        messages = this.toMessages(messages);
         const conversationMessages = [];
         let parentMessageId = rootMessageId;
         for (const message of messages) {
@@ -345,32 +284,5 @@ export default class ChatClient {
             parentMessageId = conversationMessage.id;
         }
         return conversationMessages;
-    }
-
-    getDataType(data) {
-        if (data === null) {
-            return 'null';
-        }
-        if (typeof data === 'string') {
-            const parsedString = this.parseHistoryString(data);
-            if (parsedString.length) {
-                return 'messageHistory';
-            }
-            return 'string';
-        } if (Array.isArray(data)) {
-            if (data.length === 0) {
-                return '[]';
-            }
-            return `[${this.getDataType(data[0])}]`;
-        } if (typeof data === 'object') {
-            if ('author' in data) {
-                return 'basicMessage';
-            }
-            if ('message' in data) {
-                return 'conversationMessage';
-            }
-            return 'unknown';
-        }
-        return 'unknown';
     }
 }

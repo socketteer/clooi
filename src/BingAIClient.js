@@ -30,8 +30,9 @@ export default class BingAIClient extends ChatClient {
         super(options, {
             bot: {
                 display: 'Bing',
-                author: 'bot',
-                transcript: 'assistant',
+                author: 'assistant',
+                // transcript: 'assistant',
+                // xml: 'assistant',
                 defaultMessageType: 'message',
             },
         });
@@ -799,7 +800,7 @@ export default class BingAIClient extends ChatClient {
 
         const replyMessage = this.createConversationMessage(
             {
-                author: 'bot',
+                author: this.participants.bot.author,
                 text: reply.text,
                 details: reply,
                 searchResults,

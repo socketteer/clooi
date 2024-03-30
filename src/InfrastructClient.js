@@ -1,6 +1,4 @@
 import crypto from 'crypto';
-import { fetchEventSource } from '@waylaidwanderer/fetch-event-source';
-import { Agent } from 'undici';
 
 import ChatClient from './ChatClient.js';
 
@@ -13,7 +11,7 @@ export default class InfrastructClient extends ChatClient {
             bot: {
                 display: 'Infrastruct',
                 author: 'assistant',
-                transcript: 'assistant',
+                // transcript: 'assistant',
                 defaultMessageType: 'message',
             },
         });

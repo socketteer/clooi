@@ -134,7 +134,7 @@ async function loadSettings() {
             title: '😊', padding: 0.7, margin: 1, titleAlignment: 'center', borderStyle: 'arrow', borderColor: 'gray',
         }));
     } else {
-        console.log(tryBoxen(`Welcome to the ${getAILabel()} CLooI`, {
+        console.log(tryBoxen(`${getAILabel()} CLooI`, {
             padding: 0.7, margin: 1, borderStyle: 'double', dimBorder: true,
         }));
     }
@@ -733,9 +733,12 @@ async function addMessages(newMessages = null) {
     return showHistory();
 }
 
+<<<<<<< HEAD
 
 
 
+=======
+>>>>>>> 152ad8c (add xml parsing and tests)
 async function setOptions(key = null, value = null) {
     // todo save old value see if changed
     if (!key) {
