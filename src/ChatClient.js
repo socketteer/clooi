@@ -245,10 +245,11 @@ export default class ChatClient {
         switch (conversions.getDataType(history)) {
             case '[basicMessage]': return history;
             case 'transcript': return conversions.parseTranscript(history);
-            case 'xml': return conversions.parseXml(history);
+            // case 'xml': return conversions.parseXml(history);
             case 'basicMessage': return [history];
             case 'conversationMessage': return [this.toBasicMessage(history)];
             case '[conversationMessage]': return history.map(message => this.toBasicMessage(message));
+            case 'xml':
             case 'string': return [{ text: history, author: this.participants.user.author }];
             default:
                 throw new Error('Invalid history data type'); // return null;
@@ -284,5 +285,15 @@ export default class ChatClient {
             parentMessageId = conversationMessage.id;
         }
         return conversationMessages;
+    }
+
+    aiConversationMessage(message, parentMessageId) {
+        const replyMessage = {
+            id: crypto.randomUUID(),
+            parentMessageId,
+            role: this.participants.bot.display,
+            message,
+        };
+        return replyMessage;
     }
 }

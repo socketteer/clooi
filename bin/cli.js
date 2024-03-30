@@ -205,10 +205,10 @@ let availableCommands = [
     {
         name: '!rw - Rewind to a previous message',
         value: '!rw',
-        usage: '!rw [index]',
-        description: 'Rewind to a previous message.\n\t[index]: If positive, rewind to message with that index. If negative, go that many steps backwards from the current index. If not provided, a prompt will appear to choose where in conversation history to rewind to.',
+        usage: '!rw [index] [branch_index]',
+        description: 'Rewind to a previous message.\n\t[index]: If positive, rewind to message with that index. If negative, go that many steps backwards from the current index. If not provided, a prompt will appear to choose where in conversation history to rewind to.\n\t[branch]: If provided, select an alternate sibling at the provided index.',
         available: async () => Boolean(conversationData.parentMessageId),
-        command: async args => rewind(args[1] ? parseInt(args[1], 10) : null),
+        command: async args => rewind(args[1] ? parseInt(args[1], 10) : null, args[2] ? parseInt(args[2], 10) : null),
     },
     {
         name: '!fw - Go forward to a child message',
@@ -264,16 +264,16 @@ let availableCommands = [
     {
         name: '!cp - Copy data to clipboard',
         value: '!cp',
-        usage: '!cp [type]',
-        description: 'Copy data to clipboard.\n\t[type]: If provided, copy the data of that type. If not provided, a prompt will appear to choose which data to copy.',
-        command: async args => printOrCopyData('copy', args[1]),
+        usage: '!cp [type] [branch_index] [type]',
+        description: 'Copy data to clipboard.\n\t[type]: If arguments aren\'t provided, defaults to copying current index/branch and plaintext of the message. If "?" is one of the arguments, opens dropdown for types of data to copy.',
+        command: async args => printOrCopyData('copy', args.slice(1)),
     },
     {
         name: '!pr - Print data to console',
         value: '!pr',
-        usage: '!pr [type]',
-        description: 'Print data to console.\n\t[type]: If provided, print the data of that type. If not provided, a prompt will appear to choose which data to print.',
-        command: async args => printOrCopyData('print', args[1]),
+        usage: '!pr [index] [branch_index] [type]',
+        description: 'Print data to console.\n\t[type]: If arguments aren\'t provided, defaults to printing current index/branch and plaintext of the message. If "?" is one of the arguments, opens dropdown for types of data to print.',
+        command: async args => printOrCopyData('print', args.slice(1)),
     },
     {
         name: '!ml - Open the editor (for multi-line messages)',
@@ -288,13 +288,13 @@ let availableCommands = [
         usage: '!edit',
         description: 'Opens the text of the current message in the editor. If you make changes and save, a copy of the message (with the same author and type) will be created as a sibling message.',
         available: async () => Boolean(conversationData.parentMessageId),
-        command: async () => editMessage(conversationData.parentMessageId),
+        command: async args => editMessage(conversationData.parentMessageId, args.slice(1)),
     },
     {
         name: '!concat - Concatenate message(s) to the conversation',
         value: '!concat',
         usage: '!concat [message]',
-        description: 'Concatenate message(s) to the conversation.\n\t[message]: If provided, concatenate the message as a user message. If not provided, the editor will open, and you write either a single message or multiple messages in the standard transcript format.',
+        description: 'Concatenate message(s) to the conversation.\n\t[message]: If provided, concatenate the message as a user message. If not provided, the editor will open, and you write either a string for a single user message or any number of consecutive messages (with sender specified in headers) in the standard transcript format.',
         command: async args => addMessages(args[1]),
     },
     {
@@ -311,7 +311,7 @@ let availableCommands = [
         usage: '!history',
         description: 'Display conversation history in formatted boxes. If you want to copy the raw conversation history transcript, use !cp history or !pr history instead.',
         available: async () => Boolean(conversationData.parentMessageId),
-        command: async () => showHistory(),
+        command: async () => { await showHistory(); return conversation(); },
     },
     {
         name: '!exit - Exit CLooI',
@@ -363,7 +363,7 @@ let availableCommands = [
         value: '!debug',
         usage: '!debug',
         description: 'Run debug command.',
-        command: async () => debug(),
+        command: async args => debug(args.slice(1)),
     },
     // {
     //     name: '!delete-all - Delete all conversations',
@@ -442,7 +442,7 @@ async function conversation() {
         return availableCommands.filter(command => command.isAvailable && command.value.startsWith(input));
     };
     let { message } = await prompt;
-    console.log(message);
+    // console.log(message);
     message = message.trim();
     if (!message) {
         return conversation();
@@ -461,7 +461,9 @@ async function conversation() {
         logWarning('Command not found.');
         return conversation();
     }
-    return generateMessage(message);
+    await concatMessages(message);
+    await showHistory();
+    return generateMessage();
 }
 
 async function generateMessage(message = null) {
@@ -546,10 +548,17 @@ async function generateMessage(message = null) {
                 suggestions = `\n${suggestionsBoxes(suggestedUserMessages)}`;
             }
         }
+        conversationStart();
         console.log(`${boxes}${suggestions}`);
     } catch (error) {
         spinner.stop();
+        // if request was aborted by user
+        if (reply && conversationData.parentMessageId) {
+            const aiMessage = client.aiConversationMessage(reply, conversationData.parentMessageId);
+            return addMessages(aiMessage);
+        }
         logError(error?.json?.error?.message || error.body || error || 'Unknown error');
+
         // TODO add user message and partial AI message
     }
     return conversation();
@@ -574,15 +583,42 @@ async function retryResponse() {
     return generateMessage('');
 }
 
-async function rewindTo(index) {
+async function getMessageByIndex(pathIndex = null, branchIndex = null) {
     const messageHistory = await getHistory();
     if (!messageHistory) {
-        return conversation();
+        return null;
     }
-    if (index < 0) {
-        index -= 1;
+    let anchorMessage = null;
+    if (pathIndex === null || pathIndex === '.') {
+        anchorMessage = await getCurrentMessage();
+    } else {
+        if (pathIndex < 0) {
+            pathIndex -= 1; // relative index
+        }
+        [anchorMessage] = messageHistory.slice(pathIndex);
     }
-    const conversationMessage = messageHistory.slice(index)[0];
+    if (!anchorMessage) {
+        // logWarning('Message not found.');
+        return null;
+    }
+    if (branchIndex === null) {
+        return anchorMessage;
+    }
+    const messages = await conversationMessages();
+    const siblingMessages = getSiblings(messages, anchorMessage.id);
+    const anchorSiblingIndex = getSiblingIndex(messages, anchorMessage.id);
+    if (branchIndex < 0) {
+        branchIndex = anchorSiblingIndex + branchIndex;
+    }
+    if (branchIndex < 0 || branchIndex >= siblingMessages.length) {
+        // logWarning('Invalid index.');
+        return null;
+    }
+    return siblingMessages[branchIndex];
+}
+
+async function rewindTo(index, branchIndex = null) {
+    const conversationMessage = await getMessageByIndex(index, branchIndex);
     if (!conversationMessage) {
         logWarning('Message not found.');
         return conversation();
@@ -590,7 +626,7 @@ async function rewindTo(index) {
     return selectMessage(conversationMessage.id);
 }
 
-async function rewind(idx) {
+async function rewind(idx, branchIndex = null) {
     const messageHistory = await getHistory();
     if (!messageHistory || messageHistory.length < 2) {
         return conversation();
@@ -612,13 +648,14 @@ async function rewind(idx) {
         ]);
         idx = index;
     }
-    return rewindTo(idx);
+    return rewindTo(idx, branchIndex);
 }
 
 async function selectMessage(messageId) {
     conversationData.parentMessageId = messageId;
     logSuccess(`Selected message ${messageId}.`);
-    return showHistory();
+    await showHistory();
+    return conversation();
 }
 
 async function selectChildMessage(index = null) {
@@ -682,29 +719,43 @@ async function selectSiblingMessage(index = null) {
         ]);
         index = idx;
     }
-    if (index < 0 || index >= siblingMessages.length) {
+    const siblingMessage = await getMessageByIndex('.', index);
+    if (!siblingMessage) {
         logWarning('Invalid index.');
         return conversation();
     }
-    return selectMessage(siblingMessages[index].id);
+    return selectMessage(siblingMessage.id);
 }
 
-async function debug() {
-    const currentConversationId = getConversationId();
-    const savedConversations = await client.conversationsCache.get('savedConversations') || [];
-    console.log(savedConversations);
-    const savedStates = [];
-    for (const name of savedConversations) {
-        conversationData = (await client.conversationsCache.get(name)) || {};
-        if (conversationData && getConversationId(conversationData) === currentConversationId) {
-            savedStates.push({ name, conversationData });
-        }
-    }
-    console.log(savedStates);
-    // console.log(client.getDataType(await getHistory()));
-    // const currentMessage = await getCurrentMessage();
-    // console.log(Object.keys(BingAIClient.getSearchResults(currentMessage)));
+async function debug(args) {
+    const targetMessage = await getMessageByIndex(args[0], args[1]);
+    console.log(targetMessage.message);
+
+    // const currentConversationId = getConversationId();
+    // const savedConversations = await client.conversationsCache.get('savedConversations') || [];
+    // console.log(savedConversations);
+    // const savedStates = [];
+    // for (const name of savedConversations) {
+    //     conversationData = (await client.conversationsCache.get(name)) || {};
+    //     if (conversationData && getConversationId(conversationData) === currentConversationId) {
+    //         savedStates.push({ name, conversationData });
+    //     }
+    // }
+    // console.log(savedStates);
+    // // console.log(client.getDataType(await getHistory()));
+    // // const currentMessage = await getCurrentMessage();
+    // // console.log(Object.keys(BingAIClient.getSearchResults(currentMessage)));
     return conversation();
+}
+
+async function concatMessages(newMessages) {
+    const convId = getConversationId();
+    const { conversationId, messageId } = await client.addMessages(convId, newMessages, conversationData.parentMessageId);
+    conversationData = {
+        ...conversationData,
+        ...(clientToUse === 'bing' ? { jailbreakConversationId: conversationId } : { conversationId }),
+        parentMessageId: messageId,
+    };
 }
 
 async function addMessages(newMessages = null) {
@@ -723,14 +774,9 @@ async function addMessages(newMessages = null) {
     if (!newMessages) {
         return conversation();
     }
-    const convId = getConversationId();
-    const { conversationId, messageId } = await client.addMessages(convId, newMessages, conversationData.parentMessageId);
-    conversationData = {
-        ...conversationData,
-        ...(clientToUse === 'bing' ? { jailbreakConversationId: conversationId } : { conversationId }),
-        parentMessageId: messageId,
-    };
-    return showHistory();
+    await concatMessages(newMessages);
+    await showHistory();
+    return conversation();
 }
 
 <<<<<<< HEAD
@@ -774,7 +820,8 @@ async function setOptions(key = null, value = null) {
     }
     clientOptions[key] = value;
     logSuccess(`Set ${key} to ${value}.`);
-    return showHistory();
+    await showHistory();
+    return conversation();
 }
 
 async function useEditor() {
@@ -790,18 +837,24 @@ async function useEditor() {
     if (!message) {
         return conversation();
     }
-    console.log(message);
-    return generateMessage(message);
+    // console.log(message);
+    await concatMessages(message);
+    await showHistory();
+    return generateMessage();
+
+    // return generateMessage(message);
 }
 
-async function editMessage(messageId) {
-    const currentMessage = await getCurrentMessage();
-    if (!currentMessage) {
-        logWarning('Current message not found.');
+async function editMessage(messageId, args = null) {
+    const [pathIndex, branchIndex] = args;
+    // const currentMessage = await getCurrentMessage();
+    const targetMessage = await getMessageByIndex(pathIndex, branchIndex);
+    if (!targetMessage) {
+        logWarning('Message not found.');
         return conversation();
     }
-    const initialMessage = currentMessage.message;
-    console.log(initialMessage);
+    const initialMessage = targetMessage.message;
+    // console.log(initialMessage);
     let { message } = await inquirer.prompt([
         {
             type: 'editor',
@@ -821,7 +874,7 @@ async function editMessage(messageId) {
         return conversation();
     }
     const editedMessage = {
-        ...currentMessage,
+        ...targetMessage,
         message,
         id: crypto.randomUUID(),
     };
@@ -900,7 +953,8 @@ async function loadConversationState(name = 'lastConversation') {
 
     if (conversationId) {
         logSuccess(`Resumed ${conversationId} at ${name}.`);
-        return showHistory();
+        await showHistory();
+        return conversation();
     }
     logWarning('Conversation not found.');
     return conversation();
@@ -919,6 +973,7 @@ async function loadSavedState(name = null) {
                 name: 'conversationName',
                 message: 'Select a conversation to load:',
                 choices: savedConversations,
+                pageSize: Math.min(savedConversations.length * 2, 15),
             },
         ]);
         name = conversationName;
@@ -949,7 +1004,8 @@ async function loadConversation(conversationId) {
     const lastMessageId = messages[messages.length - 1].id;
     conversationData.parentMessageId = lastMessageId;
     logSuccess(`Resumed conversation ${conversationId}.`);
-    return showHistory();
+    await showHistory();
+    return conversation();
 }
 
 async function getSavedStatesForConversation(conversationId = null) {
@@ -1075,22 +1131,32 @@ async function getConversationHistoryString() {
     return client.toTranscript(messageHistory);
 }
 
-async function printOrCopyData(action, type = null) {
+function isNumeric(value) {
+    return /^-?\d+$/.test(value);
+}
+
+async function printOrCopyData(action, args = null) {
     if (action !== 'print' && action !== 'copy') {
         logWarning('Invalid action.');
         return conversation();
     }
-    if (type === null) {
+    let type = null;
+    // get first arg that isn't a number and isn't '.'
+    if (!args) {
+        args = [];
+    }
+    type = args.find(a => !isNumeric(a) && a !== '.');
+    // remove type from args
+    args = args.filter(a => a !== type);
+
+    if (type === '?') {
         const { dataType } = await inquirer.prompt([
             {
                 type: 'list',
                 name: 'dataType',
                 message: 'Select a data type:',
                 choices: [
-                    {
-                        name: '. (current message text)',
-                        value: '.',
-                    },
+                    'text',
                     'response',
                     'responseText',
                     'eventLog',
@@ -1103,21 +1169,25 @@ async function printOrCopyData(action, type = null) {
             },
         ]);
         type = dataType;
+    } else if (!type) {
+        type = 'text';
     }
-    if (type === null) {
-        logWarning('No data type.');
+    const [index, branchIndex] = args;
+
+    const targetMessage = await getMessageByIndex(index, branchIndex);
+    if (!targetMessage) {
+        logWarning('Current message not found.');
         return conversation();
     }
+    // if (type === null) {
+    //     logWarning('No data type.');
+    //     return conversation();
+    // }
     let data;
-    let currentMessage;
+    // let currentMessage;
     switch (type) {
-        case '.':
-            currentMessage = await getCurrentMessage();
-            if (!currentMessage) {
-                logWarning('Current message not found.');
-                return conversation();
-            }
-            data = currentMessage.message;
+        case 'text':
+            data = targetMessage.message;
             break;
         case 'response':
             data = responseData;
@@ -1135,12 +1205,7 @@ async function printOrCopyData(action, type = null) {
             data = await getConversationHistoryString();
             break;
         case 'message':
-            currentMessage = await getCurrentMessage();
-            if (!currentMessage) {
-                logWarning('Current message not found.');
-                return conversation();
-            }
-            data = currentMessage;
+            data = targetMessage;
             break;
         case 'messages':
             data = await conversationMessages();
@@ -1202,6 +1267,18 @@ function logSuccess(message) {
 function logWarning(message) {
     console.log(tryBoxen(message, {
         title: 'Warning', padding: 0.7, margin: 1, borderColor: 'yellow', float: 'center',
+    }));
+}
+
+function conversationStart() {
+    console.log(tryBoxen(`Start of conversation ${getConversationId()}`, {
+        padding: 0.7,
+        margin: 2,
+        fullscreen: (width, height) => [width - 1, 2],
+        borderColor: 'blue',
+        borderStyle: 'doubleSingle',
+        float: 'center',
+        dimBorder: true,
     }));
 }
 
@@ -1294,9 +1371,11 @@ async function historyBoxes() {
 async function showHistory() {
     const boxes = await historyBoxes();
     if (boxes) {
+        conversationStart();
+        // logSuccess('Conversation history:');
         console.log(boxes);
     }
-    return conversation();
+    // return conversation();
 }
 
 function getAILabel() {

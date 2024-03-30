@@ -155,15 +155,15 @@ export default class ClaudeClient extends ChatClient {
 
         // console.log(reply);
 
-
         parentMessageId = userConversationMessage ? userConversationMessage.id : parentMessageId;
 
-        const replyMessage = {
-            id: crypto.randomUUID(),
-            parentMessageId,
-            role: this.participants.bot.display,
-            message: reply,
-        };
+        const replyMessage = this.aiConversationMessage(reply, parentMessageId);
+        // const replyMessage = {
+        //     id: crypto.randomUUID(),
+        //     parentMessageId,
+        //     role: this.participants.bot.display,
+        //     message: reply,
+        // };
 
         conversation.messages.push(replyMessage);
 
