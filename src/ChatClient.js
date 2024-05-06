@@ -252,7 +252,8 @@ export default class ChatClient {
             case 'xml':
             case 'string': return [{ text: history, author: this.participants.user.author }];
             default:
-                throw new Error('Invalid history data type'); // return null;
+                return [];
+                // throw new Error('Invalid history data type:', typeof history); // return null;
         }
     }
 

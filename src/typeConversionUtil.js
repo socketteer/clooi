@@ -89,7 +89,7 @@ export function parseTranscript(historyString) {
 }
 
 export function getDataType(data) {
-    if (data === null) {
+    if (data === null || data === undefined) {
         return 'null';
     }
     if (typeof data === 'string') {
