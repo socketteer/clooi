@@ -3,35 +3,45 @@ import crypto from 'crypto';
 import Keyv from 'keyv';
 import { fetchEventSource } from '@waylaidwanderer/fetch-event-source';
 import { Agent } from 'undici';
-import * as conversions from './typeConversionUtil.js';
-// import { isValidXML } from './typeConversionUtil.js';
+import { getMessagesForConversation } from './conversation.js';
+import { encoding_for_model as encodingForModel, get_encoding as getEncoding } from '@dqbd/tiktoken';
 
-const defaultParticipants = {
+import * as conversions from './typeConversionUtil.js';
+
+const DEFAULT_MODEL_INFO = {
+    default: {
+        contextLength: 8192,
+        maxResponseTokens: 4096,
+    },
+};
+
+const DEFAULT_PARTICIPANTS = {
     user: {
         display: 'User',
         author: 'user',
-        // transcript: 'user',
-        // xml: 'user',
         defaultMessageType: 'message',
     },
     bot: {
         display: 'Assistant',
         author: 'assistant',
-        // transcript: 'assistant',
-        // xml: 'assistant',
         defaultMessageType: 'message',
     },
     system: {
         display: 'System',
         author: 'system',
-        // transcript: 'system',
-        // xml: 'system',
         defaultMessageType: 'message',
     },
 };
 
+const DEFAULT_API_MESSAGE_SCHEMA = {
+    author: 'role',
+    text: 'content',
+};
+
+const tokenizersCache = {};
+
 export default class ChatClient {
-    constructor(options, participants = {}) {
+    constructor(options) {
         if (options.keyv) {
             if (!options.keyv.namespace) {
                 console.warn(
@@ -44,10 +54,13 @@ export default class ChatClient {
             cacheOptions.namespace = cacheOptions.namespace || 'default';
             this.conversationsCache = new Keyv(cacheOptions);
         }
-
+        this.isChatGptModel = false;
+        this.endToken = '';
+        this.apiMessageSchema = DEFAULT_API_MESSAGE_SCHEMA;
+        this.modelInfo = DEFAULT_MODEL_INFO;
+        this.modelPointers = {};
         this.setOptions(options);
-        this.participants = defaultParticipants;
-        this.setParticipants(participants);
+        // this.options.debug = true;
     }
 
     setOptions(options) {
@@ -63,13 +76,32 @@ export default class ChatClient {
                 ...options,
             };
         }
-    }
-
-    setParticipants(participants) {
+        const modelOptions = this.options.modelOptions || {};
+        this.modelOptions = {
+            ...this.modelOptions,
+            ...modelOptions,
+        };
+        const participants = this.options.participants || {};
         this.participants = {
+            ...DEFAULT_PARTICIPANTS,
             ...this.participants,
             ...participants,
         };
+        const modelInfo = this.modelInfo[this.modelOptions.model] ||
+        this.modelInfo[this.modelPointers[this.modelOptions.model]] ||
+        this.modelInfo.default;
+        this.maxContextTokens = modelInfo.contextLength;
+        this.maxResponseTokens = this.modelOptions.max_tokens || modelInfo.maxResponseTokens || 400;
+        this.maxPromptTokens = this.options.maxPromptTokens || (this.maxContextTokens - this.maxResponseTokens);
+
+        if (this.maxPromptTokens + this.maxResponseTokens > this.maxContextTokens) {
+            throw new Error(`maxPromptTokens + max_tokens (${this.maxPromptTokens} + ${this.maxResponseTokens} = ${this.maxPromptTokens + this.maxResponseTokens}) must be less than or equal to maxContextTokens (${this.maxContextTokens})`);
+        }
+        return this;
+    }
+
+    get names() {
+        return this.participants;
     }
 
     convertAlias(sourceType, targetType, alias) {
@@ -82,16 +114,212 @@ export default class ChatClient {
         return alias;
     }
 
-    async sendMessage() {
-        throw new Error('Not implemented');
+    // TODO trim prompt to fit context length
+    async buildConversationHistory(conversationId, parentMessageId = null) {
+        const conversation = (await this.conversationsCache.get(conversationId)) || {
+            messages: [],
+            createdAt: Date.now(),
+        };
+
+        const previousMessages = getMessagesForConversation(
+            conversation.messages,
+            parentMessageId,
+        ).map(msg => this.toBasicMessage(msg));
+
+        const parentId = parentMessageId || previousMessages[conversation.messages.length - 1]?.id || crypto.randomUUID();
+
+        return {
+            parentId,
+            previousMessages,
+            conversation,
+        };
+    }
+
+    buildMessage(message = '', author = null, type = null) {
+        const text = message?.text || message;
+        author = message?.author || author;
+        type = message?.type || type;
+        const basicMessage = {
+            author: author || this.participants.user.author,
+            text,
+            type: type || this.participants[author]?.defaultMessageType || 'message',
+        };
+        return basicMessage;
+    }
+
+    buildApiParams(userMessage, previousMessages = [], systemMessage = null) {
+        const history = [
+            ...userMessage ? [userMessage] : [],
+            ...previousMessages,
+        ];
+        const messages = history.map(msg => this.toAPImessage(msg));
+        return {
+            messages,
+            system: systemMessage?.text || null,
+        };
+    }
+
+    async sendMessage(message, opts = {}) {
+        if (opts.clientOptions && typeof opts.clientOptions === 'object') {
+            this.setOptions(opts.clientOptions);
+        }
+
+        let {
+            conversationId = null,
+            onProgress,
+            systemMessage = null,
+        } = opts;
+
+        const {
+            parentMessageId,
+            saveToCache = true,
+        } = opts;
+
+        if (typeof onProgress !== 'function') {
+            onProgress = () => {};
+        }
+
+        if (conversationId === null) {
+            conversationId = crypto.randomUUID();
+        }
+        const { parentId, previousMessages, conversation } = await this.buildConversationHistory(conversationId, parentMessageId);
+
+        let userMessage;
+        if (message) {
+            userMessage = this.buildMessage(message, this.participants.user.author);
+        }
+
+        let userConversationMessage;
+        if (saveToCache && userMessage) {
+            userConversationMessage = this.createConversationMessage(userMessage, parentId);
+            conversation.messages.push(userConversationMessage);
+        }
+
+        if (systemMessage) {
+            systemMessage = this.buildMessage(systemMessage, this.participants.system.author);
+        }
+
+        const completionParentId = userConversationMessage ? userConversationMessage.id : parentMessageId;
+
+        const apiParams = this.buildApiParams(userMessage, previousMessages, systemMessage);
+        if (this.options.debug) {
+            console.debug('apiParams:', apiParams);
+            console.debug('opts:', opts);
+            console.debug('userConversationMessage:', userConversationMessage);
+        }
+        const { result, replies } = await this.callAPI(apiParams, opts);
+        const newConversationMessages = [];
+        for (const [index, text] of Object.entries(replies)) {
+            const simpleMessage = this.buildMessage(text.trim(), this.participants.bot.author);
+            newConversationMessages.push(this.createConversationMessage(simpleMessage, completionParentId));
+        }
+
+        if (saveToCache) {
+            conversation.messages.push(...newConversationMessages);
+            await this.conversationsCache.set(conversationId, conversation);
+        }
+        const botConversationMessage = newConversationMessages[0];
+
+        return {
+            conversationId,
+            parentId: completionParentId,
+            messageId: botConversationMessage.id,
+            messages: conversation.messages,
+            apiParams,
+            response: result,
+            replies: newConversationMessages,
+            details: null,
+        };
+    }
+
+    getHeaders() {
+        return {
+            Authorization: `Bearer ${this.apiKey}`,
+        };
+    }
+
+    onProgressWrapper(message, replies, opts) {
+        if (message === '[DONE]') {
+            // if (opts.onAllMessagesDone) {
+            //     opts.onAllMessagesDone(result, replies);
+            // }
+            return;
+        }
+        const index = message.choices[0]?.index;
+        const token = this.isChatGptModel ? message.choices[0]?.delta.content : message.choices[0]?.text;
+        if (this.options.debug) {
+            console.debug('token:', token);
+        }
+
+        if (!token || token === this.endToken) {
+            if (this.options.debug) {
+                console.debug('encountered end token');
+            }
+            if (index === 0) {
+                if (opts.onFirstMessageDone) {
+                    if (this.options.debug) {
+                        console.debug('calling onFirstMessageDone');
+                    }
+                    opts.onFirstMessageDone(replies[0]);
+                }
+            }
+            return;
+        }
+        if (index !== undefined) {
+            if (!replies[index]) {
+                replies[index] = '';
+            }
+            replies[index] += token;
+            if (index === 0) {
+                opts.onProgress(token);
+                // reply += token;
+            }
+        }
+    }
+
+    parseReplies(result, replies) {
+        Array.from(result.choices).forEach((choice, index) => {
+            replies[index] = this.isChatGptModel ? choice.message.content : choice.text;
+        });
+    }
+
+    async callAPI(params, opts = {}) {
+        // let reply = '';
+        let result = null;
+        const replies = {};
+        const stream = typeof opts.onProgress === 'function' && this.modelOptions.stream;
+        result = await this.getCompletion(
+            params,
+            this.getHeaders(),
+            stream ? (progressMessage) => {
+                this.onProgressWrapper(progressMessage, replies, opts);
+            } : null,
+            opts.abortController || new AbortController(),
+        );
+        if (!stream) {
+            // if (this.options.debug) {
+            //     console.debug(JSON.stringify(result));
+            // }
+            this.parseReplies(result, replies);
+        }
+        // if (this.options.debug) {
+        //     console.debug('result:', JSON.stringify(result));
+        //     console.debug('replies:', replies);
+        // }
+
+        // if (opts.onAllMessagesDone) {
+        //     opts.onAllMessagesDone(result, replies);
+        // }
+        return {
+            result,
+            replies,
+        };
     }
 
     async getCompletion(params, headers, onProgress, abortController, debug = false) {
         const modelOptions = {
             ...this.modelOptions,
             ...params,
-            stream: true,
-
         };
         const opts = {
             method: 'POST',
@@ -105,11 +333,12 @@ export default class ChatClient {
                 headersTimeout: 0,
             }),
         };
-        const url = this.completionsUrl;
 
-        // opts.headers['x-api-key'] = this.apiKey;
-        // opts.headers['anthropic-version'] = '2023-06-01';
-        // opts.headers['anthropic-beta'] = 'messages-2023-12-15';
+        if (this.options.debug) {
+            console.debug('request body:', modelOptions);
+        }
+
+        const url = this.completionsUrl;
 
         if (modelOptions.stream) {
             // eslint-disable-next-line no-async-promise-executor
@@ -232,10 +461,21 @@ export default class ChatClient {
         };
     }
 
+    toAPImessage(message) {
+        // for every key in this.apiMessageSchema, map the value from the message
+        const apiMessage = {};
+        for (const key in this.apiMessageSchema) {
+            if (message[key]) {
+                apiMessage[this.apiMessageSchema[key]] = message[key];
+            }
+        }
+        return apiMessage;
+    }
+
     toBasicMessage(conversationMessage) {
         const author = this.convertAlias('display', 'author', conversationMessage.role);
         return {
-            text: conversationMessage.message,
+            text: conversationMessage.message || '',
             author,
             type: conversationMessage.type || this.participants[author]?.defaultMessageType || 'message',
         };
@@ -288,13 +528,21 @@ export default class ChatClient {
         return conversationMessages;
     }
 
-    aiConversationMessage(message, parentMessageId) {
-        const replyMessage = {
-            id: crypto.randomUUID(),
-            parentMessageId,
-            role: this.participants.bot.display,
-            message,
-        };
-        return replyMessage;
+    static getTokenizer(encoding, isModelName = false, extendSpecialTokens = {}) {
+        if (tokenizersCache[encoding]) {
+            return tokenizersCache[encoding];
+        }
+        let tokenizer;
+        if (isModelName) {
+            tokenizer = encodingForModel(encoding, extendSpecialTokens);
+        } else {
+            tokenizer = getEncoding(encoding, extendSpecialTokens);
+        }
+        tokenizersCache[encoding] = tokenizer;
+        return tokenizer;
+    }
+
+    getTokenCount(text) {
+        return this.gptEncoder.encode(text, 'all').length;
     }
 }

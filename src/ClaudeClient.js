@@ -1,32 +1,53 @@
-
 import ChatClient from './ChatClient.js';
 
-import crypto from 'crypto';
+const CLAUDE_MODEL_INFO = {
+    default: {
+        contextLength: 100000,
+        vision: true,
+        maxResponseTokens: 10000,
+    },
+    'claude-3-opus-20240229': {
+        contextLength: 100000,
+        vision: true,
+        maxResponseTokens: 10000,
+    },
+    'claude-3-sonnet-20240229': {
+        contextLength: 100000,
+        vision: true,
+        maxResponseTokens: 10000,
+    },
+    'claude-3-haiku-20240307': {
+        contextLength: 100000,
+        vision: true,
+        maxResponseTokens: 10000,
+    },
+};
 
-import { getMessagesForConversation } from './conversation.js';
+const CLAUDE_PARTICIPANTS = {
+    bot: {
+        display: 'Claude',
+        author: 'assistant',
+        defaultMessageType: 'message',
+    },
+};
+
+const CLAUDE_DEFAULT_MODEL_OPTIONS = {
+    model: 'claude-3-opus-20240229',
+    max_tokens: 4096,
+    temperature: 1,
+    stream: true,
+};
 
 export default class ClaudeClient extends ChatClient {
     constructor(apiKey, options) {
         options.cache.namespace = options.cache.namespace || 'claude';
-        super(options, {
-            bot: {
-                display: 'Claude',
-                author: 'assistant',
-                // transcript: 'assistant',
-                // xml: 'assistant',
-                defaultMessageType: 'message',
-            },
-        });
+        super(options);
         this.apiKey = apiKey;
         this.completionsUrl = 'https://api.anthropic.com/v1/messages';
-        this.modelOptions = {
-            // set some good defaults (check for undefined in some cases because they may be 0)
-            model: 'claude-3-opus-20240229',
-            max_tokens: 4096,
-            temperature: 1,
-            stream: true,
-        };
-
+        this.modelOptions = CLAUDE_DEFAULT_MODEL_OPTIONS;
+        this.participants = CLAUDE_PARTICIPANTS;
+        this.modelInfo = CLAUDE_MODEL_INFO;
+        this.n = 3;
         this.setOptions(options);
     }
 
@@ -35,155 +56,224 @@ export default class ClaudeClient extends ChatClient {
         if (this.options.openaiApiKey) {
             this.apiKey = this.options.anthropicApiKey;
         }
-        const modelOptions = this.options.modelOptions || {};
-        this.modelOptions = {
-            ...this.modelOptions,
-            ...modelOptions,
-        };
+        return this;
     }
 
-    async sendMessage(message, opts = {}) {
-        if (opts.clientOptions && typeof opts.clientOptions === 'object') {
-            this.setOptions(opts.clientOptions);
-        }
-
-        let {
-            conversationId = null,
-            parentMessageId,
-            onProgress,
-        } = opts;
-
-        const {
-            systemMessage = null,
-        } = opts;
-
-        if (typeof onProgress !== 'function') {
-            onProgress = () => {};
-        }
-
-        if (conversationId === null) {
-            conversationId = crypto.randomUUID();
-        }
-
-        const conversation = (await this.conversationsCache.get(conversationId)) || {
-            messages: [],
-            createdAt: Date.now(),
-        };
-
-        const previousCachedMessages = getMessagesForConversation(
-            conversation.messages,
-            parentMessageId,
-        ).map(msg => this.toApiMessage(msg));
-
-        parentMessageId = parentMessageId || previousCachedMessages[conversation.messages.length - 1]?.id || crypto.randomUUID();
-        let userMessage;
-        let userConversationMessage;
-
-        if (message) {
-            if (typeof message === 'string') {
-                userMessage = {
-                    role: 'user',
-                    content: message,
-                };
-            } else {
-                userMessage = message;
-            }
-
-            userConversationMessage = {
-                id: crypto.randomUUID(),
-                parentMessageId,
-                role: 'User',
-                message: userMessage.content,
-            };
-
-            conversation.messages.push(userConversationMessage);
-            previousCachedMessages.push(userMessage);
-
-            await this.conversationsCache.set(conversationId, conversation);
-        }
-
-        const params = {
-            messages: previousCachedMessages,
-            system: systemMessage,
-        };
-        // console.log(params);
-        const headers = {
+    getHeaders() {
+        return {
             'x-api-key': this.apiKey,
             'anthropic-version': '2023-06-01',
             'anthropic-beta': 'messages-2023-12-15',
         };
+    }
 
-        let reply = '';
-        let result = null;
-        if (typeof opts.onProgress === 'function' && this.modelOptions.stream) {
-            result = await this.getCompletion(
-                params,
-                headers,
-                (progressMessage) => {
-                    if (progressMessage === '[DONE]') {
-                        return;
-                    }
-                    if (progressMessage.type === 'message_start') {
-                        return;
-                    }
-                    if (progressMessage.type === 'message_end') {
-                        return;
-                    }
-                    if (progressMessage.type === 'content_block_start') {
-                        return;
-                    }
-                    if (progressMessage.type === 'content_block_delta') {
-                        opts.onProgress(progressMessage.delta.text);
-                        reply += progressMessage.delta.text;
-                    } else {
-                        // console.debug(progressMessage);
-                    }
-                },
-                opts.abortController || new AbortController(),
-            );
-        } else {
-            result = await this.getCompletion(
-                params,
-                null,
-                opts.abortController || new AbortController(),
-            );
-            if (this.options.debug) {
-                console.debug(JSON.stringify(result));
+    onProgressWrapper(message, replies, idx, opts) {
+        if (message === '[DONE]') {
+            return;
+        }
+        if (message.type === 'message_start') {
+            return;
+        }
+        if (message.type === 'message_end') {
+            return;
+        }
+        if (message.type === 'content_block_start') {
+            return;
+        }
+        if (message.type === 'content_block_delta') {
+            if (!replies[idx]) {
+                replies[idx] = '';
             }
-            reply = result.choices[0].message.content;
+            replies[idx] += message.delta.text;
+            if (idx === 0) {
+                opts.onProgress(message.delta.text);
+            }
+        } else {
+            // console.debug(progressMessage);
+        }
+    }
+
+    async callAPI(params, opts = {}) {
+        let result = null;
+        const replies = {};
+        const stream = typeof opts.onProgress === 'function' && this.modelOptions.stream;
+        result = await Promise.all([...Array(this.n).keys()].map(async idx => this.getCompletion(
+            params,
+            this.getHeaders(),
+            stream ? (message) => {
+                this.onProgressWrapper(message, replies, idx, opts);
+            } : null,
+            opts.abortController || new AbortController(),
+        )));
+        if (!stream) {
+            this.parseReplies(result, replies);
         }
 
-        // console.log(reply);
-
-        parentMessageId = userConversationMessage ? userConversationMessage.id : parentMessageId;
-
-        const replyMessage = this.aiConversationMessage(reply, parentMessageId);
-        // const replyMessage = {
-        //     id: crypto.randomUUID(),
-        //     parentMessageId,
-        //     role: this.participants.bot.display,
-        //     message: reply,
-        // };
-
-        conversation.messages.push(replyMessage);
-
-        await this.conversationsCache.set(conversationId, conversation);
-
         return {
-            conversationId,
-            parentId: replyMessage.parentMessageId,
-            messageId: replyMessage.id,
-            // messages: conversation.messages,
-            response: reply,
-            details: result || null,
+            replies,
+            result,
         };
     }
 
-    toApiMessage(conversationMessage) {
-        const role = this.convertAlias('display', 'author', conversationMessage.role);
+    parseReplies(result, replies) {
+        result.forEach((res, idx) => {
+            replies[idx] = res.choices[0].message.content;
+        });
+    }
+
+    buildApiParams(userMessage, previousMessages = [], systemMessage = null) {
+        const { messages: history, system } = super.buildApiParams(userMessage, previousMessages, systemMessage);
+        // merge all consecutive messages from the same author
+        const mergedMessageHistory = [];
+        let lastMessage = null;
+        for (const message of history) {
+            if (lastMessage && lastMessage.author === message.author) {
+                lastMessage.text += `${message.text}`;
+            } else {
+                lastMessage = message;
+                mergedMessageHistory.push(message);
+            }
+        }
         return {
-            content: conversationMessage.message,
-            role,
+            messages: mergedMessageHistory,
+            system,
         };
     }
+
+    // async sendMessage(message, opts = {}) {
+    //     if (opts.clientOptions && typeof opts.clientOptions === 'object') {
+    //         this.setOptions(opts.clientOptions);
+    //     }
+
+    //     let {
+    //         conversationId = null,
+    //         parentMessageId,
+    //         onProgress,
+    //     } = opts;
+
+    //     const {
+    //         systemMessage = null,
+    //     } = opts;
+
+    //     if (typeof onProgress !== 'function') {
+    //         onProgress = () => {};
+    //     }
+
+    //     if (conversationId === null) {
+    //         conversationId = crypto.randomUUID();
+    //     }
+
+    //     const conversation = (await this.conversationsCache.get(conversationId)) || {
+    //         messages: [],
+    //         createdAt: Date.now(),
+    //     };
+
+    //     const previousCachedMessages = getMessagesForConversation(
+    //         conversation.messages,
+    //         parentMessageId,
+    //     ).map(msg => this.toApiMessage(msg));
+
+    //     parentMessageId = parentMessageId || previousCachedMessages[conversation.messages.length - 1]?.id || crypto.randomUUID();
+    //     let userMessage;
+    //     let userConversationMessage;
+
+    //     if (message) {
+    //         if (typeof message === 'string') {
+    //             userMessage = {
+    //                 role: 'user',
+    //                 content: message,
+    //             };
+    //         } else {
+    //             userMessage = message;
+    //         }
+
+    //         userConversationMessage = {
+    //             id: crypto.randomUUID(),
+    //             parentMessageId,
+    //             role: 'User',
+    //             message: userMessage.content,
+    //         };
+
+    //         conversation.messages.push(userConversationMessage);
+    //         previousCachedMessages.push(userMessage);
+
+    //         await this.conversationsCache.set(conversationId, conversation);
+    //     }
+
+    //     const params = {
+    //         messages: previousCachedMessages,
+    //         system: systemMessage,
+    //     };
+    //     // console.log(params);
+    //     const headers = {
+    //         'x-api-key': this.apiKey,
+    //         'anthropic-version': '2023-06-01',
+    //         'anthropic-beta': 'messages-2023-12-15',
+    //     };
+
+    //     let reply = '';
+    //     let result = null;
+    //     if (typeof opts.onProgress === 'function' && this.modelOptions.stream) {
+    //         result = await this.getCompletion(
+    //             params,
+    //             headers,
+    //             (progressMessage) => {
+    //                 if (progressMessage === '[DONE]') {
+    //                     return;
+    //                 }
+    //                 if (progressMessage.type === 'message_start') {
+    //                     return;
+    //                 }
+    //                 if (progressMessage.type === 'message_end') {
+    //                     return;
+    //                 }
+    //                 if (progressMessage.type === 'content_block_start') {
+    //                     return;
+    //                 }
+    //                 if (progressMessage.type === 'content_block_delta') {
+    //                     opts.onProgress(progressMessage.delta.text);
+    //                     reply += progressMessage.delta.text;
+    //                 } else {
+    //                     // console.debug(progressMessage);
+    //                 }
+    //             },
+    //             opts.abortController || new AbortController(),
+    //         );
+    //     } else {
+    //         result = await this.getCompletion(
+    //             params,
+    //             null,
+    //             opts.abortController || new AbortController(),
+    //         );
+    //         if (this.options.debug) {
+    //             console.debug(JSON.stringify(result));
+    //         }
+    //         reply = result.choices[0].message.content;
+    //     }
+
+    //     // console.log(reply);
+
+    //     parentMessageId = userConversationMessage ? userConversationMessage.id : parentMessageId;
+
+    //     const replyMessage = this.aiConversationMessage(reply, parentMessageId);
+    //     // const replyMessage = {
+    //     //     id: crypto.randomUUID(),
+    //     //     parentMessageId,
+    //     //     role: this.participants.bot.display,
+    //     //     message: reply,
+    //     // };
+
+    //     conversation.messages.push(replyMessage);
+
+    //     await this.conversationsCache.set(conversationId, conversation);
+
+    //     return {
+    //         conversationId,
+    //         parentId: replyMessage.parentMessageId,
+    //         messageId: replyMessage.id,
+    //         // messages: conversation.messages,
+    //         response: reply,
+    //         details: result || null,
+    //     };
+    // }
 }

@@ -49,7 +49,7 @@ export function toTranscript(messages) {
     for (const message of messages) {
         const name = message.author;
         const messageType = message.type || 'message';
-        transcript += `[${name}](#${messageType})\n${message.text}\n`;
+        transcript += `[${name}](#${messageType})\n${message.text}\n\n`;
     }
     return transcript.trim();
 }
