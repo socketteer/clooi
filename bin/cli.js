@@ -68,6 +68,7 @@ async function loadSettings() {
     settings.bingAiClient.features.genImage = false;
 
     conversationData = settings.cliOptions?.conversationData || settings.conversationData || {};
+
     responseData = {};
     clientToUse = settings.cliOptions?.clientToUse || settings.clientToUse || 'bing';
     // console.log(settings)
@@ -121,13 +122,21 @@ async function loadSettings() {
                 },
             );
             break;
-        default:
+        case 'chatgpt':
+            clientOptions = {
+                ...settings.chatGptClient,
+                ...settings.cliOptions.chatGptOptions,
+            };
             client = new ChatGPTClient(
                 settings.openaiApiKey || settings.chatGptClient.openaiApiKey,
-                settings.chatGptClient,
-                settings.cacheOptions,
+                {
+                    ...clientOptions,
+                    cache: settings.cacheOptions,
+                },
             );
             break;
+        default:
+            throw new Error('Invalid clientToUse setting.');
     }
     if (clientToUse === 'bing') {
         console.log(tryBoxen('Welcome to the Bingleton Backrooms CLooI', {
@@ -471,9 +480,8 @@ async function generateMessage(message = null) {
     if (message) {
         console.log(userMessageBox(message));
     }
-    const aiLabel = getAILabel();
     let reply = '';
-    const spinnerPrefix = `${aiLabel} is typing...`;
+    const spinnerPrefix = `${getAILabel()} is typing...`;
     const spinner = ora(spinnerPrefix);
     spinner.prefixText = '\n   ';
     spinner.start();
@@ -492,7 +500,9 @@ async function generateMessage(message = null) {
         const eventLog = [];
         const response = await client.sendMessage(message, {
             ...conversationData,
+            ...clientOptions.modelOptions,
             ...clientOptions.messageOptions,
+            ...clientOptions.clientOptions,
             abortController: controller,
             onProgress: (diff, data) => {
                 reply += diff;
@@ -554,12 +564,11 @@ async function generateMessage(message = null) {
         spinner.stop();
         // if request was aborted by user
         if (reply && conversationData.parentMessageId) {
-            const aiMessage = client.aiConversationMessage(reply, conversationData.parentMessageId);
-            return addMessages(aiMessage);
+            const aiMessage = client.buildMessage({ text: reply, author: 'assistant' }, conversationData.parentMessageId);
+            const aiConversationMessage = client.createConversationMessage(aiMessage, conversationData.parentMessageId);
+            return addMessages(aiConversationMessage);
         }
-        logError(error?.json?.error?.message || error.body || error || 'Unknown error');
-
-        // TODO add user message and partial AI message
+        throw error;
     }
     return conversation();
 }
@@ -671,7 +680,7 @@ async function selectChildMessage(index = null) {
     }
     if (index === null) {
         const choices = childMessages.map((conversationMessage, idx) => ({
-            name: `[${idx}] ${conversationMessage.role === getAILabel() ? getAILabel() : 'User'}: ${conversationMessage.message.slice(0, 200) + (conversationMessage.message.length > 200 ? '...' : '')}`,
+            name: `[${idx}] ${conversationMessage.role}: ${conversationMessage.message.slice(0, 200) + (conversationMessage.message.length > 200 ? '...' : '')}`,
             value: idx,
         }));
         const { index: idx } = await inquirer.prompt([
@@ -703,7 +712,7 @@ async function selectSiblingMessage(index = null) {
     }
     if (index === null) {
         const choices = siblingMessages.map((conversationMessage, idx) => ({
-            name: `[${idx}] ${conversationMessage.role === getAILabel() ? getAILabel() : 'User'}: ${conversationMessage.message.slice(0, 200) + (conversationMessage.message.length > 200 ? '...' : '')}`,
+            name: `[${idx}] ${conversationMessage.role}: ${conversationMessage.message.slice(0, 200) + (conversationMessage.message.length > 200 ? '...' : '')}`,
             value: idx,
         }));
         const { index: idx } = await inquirer.prompt([
@@ -1107,15 +1116,15 @@ async function newConversation() {
     return conversation();
 }
 
-async function deleteAllConversations() {
-    if (clientToUse !== 'chatgpt') {
-        logWarning('Deleting all conversations is only supported for ChatGPT client.');
-        return conversation();
-    }
-    await client.conversationsCache.clear();
-    logSuccess('Deleted all conversations.');
-    return conversation();
-}
+// async function deleteAllConversations() {
+//     if (clientToUse !== 'chatgpt') {
+//         logWarning('Deleting all conversations is only supported for ChatGPT client.');
+//         return conversation();
+//     }
+//     await client.conversationsCache.clear();
+//     logSuccess('Deleted all conversations.');
+//     return conversation();
+// }
 
 async function getConversationHistoryString() {
     const messageHistory = await getHistory();
@@ -1264,18 +1273,6 @@ function logWarning(message) {
     }));
 }
 
-function conversationStart() {
-    console.log(tryBoxen(`Start of conversation ${getConversationId()}`, {
-        padding: 0.7,
-        margin: 2,
-        fullscreen: (width, height) => [width - 1, 2],
-        borderColor: 'blue',
-        borderStyle: 'doubleSingle',
-        float: 'center',
-        dimBorder: true,
-    }));
-}
-
 /**
  * Boxen can throw an error if the input is malformed, so this function wraps it in a try/catch.
  * @param {string} input
@@ -1302,7 +1299,7 @@ function aiMessageBox(message, title = null) {
 
 function userMessageBox(message, title = null) {
     return tryBoxen(`${message}`, {
-        title: title || 'User',
+        title: title || client.names.user.display || 'User',
         padding: 0.7,
         margin: {
             top: 1, bottom: 0, left: 2, right: 1,
@@ -1312,13 +1309,39 @@ function userMessageBox(message, title = null) {
     });
 }
 
+function systemMessageBox(message, title = null) {
+    return tryBoxen(`${message}`, {
+        title: title || 'System',
+        padding: 0.7,
+        margin: {
+            top: 1, bottom: 0, left: 1, right: 2,
+        },
+        float: 'center',
+        borderColor: 'white',
+        dimBorder: true,
+    });
+}
+
+function conversationStart() {
+    console.log(tryBoxen(`Start of conversation ${getConversationId()}`, {
+        padding: 0.7,
+        margin: 2,
+        fullscreen: (width, height) => [width - 1, 1],
+        borderColor: 'blue',
+        borderStyle: 'doubleSingle',
+        float: 'center',
+        dimBorder: true,
+    }));
+}
+
 function conversationMessageBox(conversationMessage, messages, index = null) {
     const children = getChildren(messages, conversationMessage.id);
     const siblings = getSiblings(messages, conversationMessage.id);
     const siblingIndex = getSiblingIndex(messages, conversationMessage.id);
     const aiMessage = Boolean(conversationMessage.role === getAILabel());
+    const userMessage = Boolean(conversationMessage.role === client.names.user.display);
     const indexString = index !== null ? `[${index}] ` : '';
-    const childrenString = children.length > 0 ? ` ── !fw ${children.map((child, idx) => `${idx}`).join(' ')}` : '';
+    const childrenString = children.length > 0 ? ` ── !fw [${children.map((child, idx) => `${idx}`).join(' ')}]` : '';
     const siblingsString = siblings.length > 1 ? ` ── !alt ${siblings.map((sibling, idx) => (idx === siblingIndex ? `[${idx}]` : `${idx}`)).join(' ')}` : '';
     return tryBoxen(`${conversationMessage.message}`, {
         title: `${indexString}${conversationMessage.role}${siblingsString}${childrenString}`,
@@ -1326,12 +1349,12 @@ function conversationMessageBox(conversationMessage, messages, index = null) {
         margin: {
             top: 1,
             bottom: 0,
-            left: aiMessage ? 1 : 2,
+            left: userMessage ? 2 : 1,
             right: aiMessage ? 1 : 1,
         },
         dimBorder: true,
-        borderColor: aiMessage ? 'white' : 'blue',
-        float: aiMessage ? 'left' : 'right',
+        borderColor: aiMessage ? 'white' : (userMessage ? 'blue' : 'green'),
+        float: aiMessage ? 'left' : (userMessage ? 'right' : 'center'),
     });
 }
 
@@ -1366,6 +1389,11 @@ async function showHistory() {
     const boxes = await historyBoxes();
     if (boxes) {
         conversationStart();
+        const { systemMessage } = clientOptions.messageOptions;
+        if (systemMessage) {
+            console.log(systemMessageBox(systemMessage));
+        }
+        // console.log(systemMessageBox(clientOptions.messageOptions.systemMessage));
         // logSuccess('Conversation history:');
         console.log(boxes);
     }
@@ -1373,18 +1401,7 @@ async function showHistory() {
 }
 
 function getAILabel() {
-    switch (clientToUse) {
-        case 'bing':
-            return 'Bing';
-        case 'infrastruct':
-            return 'Infrastruct'; // settings.infrastructClient?.participants?.ai?.display || 'Infrastruct';
-        case 'claude':
-            return 'Claude'; // settings.claudeClient?.participants?.ai?.display || 'Claude';
-        case 'ollama':
-            return 'Ollama'; // settings.ollamaClient?.participants?.ai?.display || 'Ollama';
-        default:
-            return settings.chatGptClient?.chatGptLabel || 'ChatGPT';
-    }
+    return client.names.bot.display || 'Assistant';
 }
 
 function getConversationId(data = conversationData) {
