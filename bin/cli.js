@@ -281,7 +281,7 @@ let availableCommands = [
         name: '!pr - Print data to console',
         value: '!pr',
         usage: '!pr [index] [branch_index] [type]',
-        description: 'Print data to console.\n\t[type]: If arguments aren\'t provided, defaults to printing current index/branch and plaintext of the message. If "?" is one of the arguments, opens dropdown for types of data to print.',
+        description: 'Print data to console.\n\t[type]: !pr . prints current node text. If arguments aren\'t provided, opens dropdown for types of data to print.',
         command: async args => printOrCopyData('print', args.slice(1)),
     },
     {
@@ -1148,11 +1148,11 @@ async function printOrCopyData(action, args = null) {
     if (!args) {
         args = [];
     }
-    type = args.find(a => !isNumeric(a) && a !== '.');
+    type = args.find(a => !isNumeric(a));
     // remove type from args
     args = args.filter(a => a !== type);
 
-    if (type === '?') {
+    if (type === '?' || !type) {
         const { dataType } = await inquirer.prompt([
             {
                 type: 'list',
@@ -1162,17 +1162,18 @@ async function printOrCopyData(action, args = null) {
                     'text',
                     'response',
                     'responseText',
-                    'eventLog',
-                    'conversationData',
-                    'history',
+                    'settings',
+                    'transcript',
                     'message',
                     'messages',
                     'messageHistory',
+                    'eventLog',
+                    'conversationData',
                 ],
             },
         ]);
         type = dataType;
-    } else if (!type) {
+    } else if (type === '.') {
         type = 'text';
     }
     const [index, branchIndex] = args;
@@ -1204,7 +1205,7 @@ async function printOrCopyData(action, args = null) {
         case 'conversationData':
             data = conversationData;
             break;
-        case 'history':
+        case 'transcript':
             data = await getConversationHistoryString();
             break;
         case 'message':
@@ -1215,6 +1216,14 @@ async function printOrCopyData(action, args = null) {
             break;
         case 'messageHistory':
             data = await getHistory();
+            break;
+        case 'settings':
+            // console.log(`client: ${clientToUse}`);
+            // console.log(`\nsettings:\n${JSON.stringify(clientOptions, null, 2)}`);
+            data = {
+                clientToUse,
+                clientOptions,
+            };
             break;
         default:
             logWarning('Invalid data type.');

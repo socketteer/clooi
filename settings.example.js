@@ -136,7 +136,12 @@ export default {
     },
     // Options for the CLI app
     cliOptions: {
-        // Possible options: "bing", "infrastruct", "claude"
+        // Possible options:
+        // "bing" (copilot API)
+        // "infrastruct" (openai completions API)
+        // "claude" (anthropic API)
+        // "chatgpt" (openai chat API)
+        // "ollama"
         clientToUse: 'claude',
         showSuggestions: true,
         showSearches: false, // not implemented yet
@@ -170,6 +175,21 @@ export default {
             },
             messageOptions: {
                 systemMessage: fs.readFileSync('./contexts/claude-cli.txt', 'utf8'),
+            },
+            clientOptions: {
+                n: 2,
+            },
+        },
+        chatGptOptions: {
+            modelOptions: {
+                model: 'gpt-4o',
+                temperature: 1,
+                max_tokens: 1000,
+                n: 3,
+                // response_format: 'text', // 'text' or 'json_object'
+            },
+            messageOptions: {
+                systemMessage: '', //fs.readFileSync('', 'utf8'),
             },
         },
         ollamaOptions: {

@@ -127,8 +127,8 @@ export default class ClaudeClient extends ChatClient {
         const mergedMessageHistory = [];
         let lastMessage = null;
         for (const message of history) {
-            if (lastMessage && lastMessage.author === message.author) {
-                lastMessage.text += `${message.text}`;
+            if (lastMessage && lastMessage.role === message.role) {
+                lastMessage.content += `${message.content}`;
             } else {
                 lastMessage = message;
                 mergedMessageHistory.push(message);

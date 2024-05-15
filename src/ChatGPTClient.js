@@ -10,6 +10,10 @@ const MODEL_INFO = {
         json: false,
         maxResponseTokens: 4096,
     },
+    'gpt-4o-2024-05-13': {
+        contextLength: 128000,
+        vision: true,
+    },
     'gpt-4-turbo-2024-04-09': {
         contextLength: 128000,
         vision: true,
@@ -37,6 +41,7 @@ const MODEL_INFO = {
 };
 
 const MODEL_POINTERS = {
+    'gpt-4o': 'gpt-4o-2024-05-13',
     'gpt-4-turbo': 'gpt-4-turbo-2024-04-09',
     'gpt-4-turbo-preview': 'gpt-4-0125-preview',
     'gpt-4-vision-preview': 'gpt-4-1106-preview',
@@ -46,7 +51,7 @@ const MODEL_POINTERS = {
 
 const CHATGPT_DEFAULT_MODEL_OPTIONS = {
     // set some good defaults (check for undefined in some cases because they may be 0)
-    model: 'gpt-4-turbo-2024-04-09',
+    model: 'gpt-4o',
     temperature: 1,
     stream: true,
     max_tokens: 600,

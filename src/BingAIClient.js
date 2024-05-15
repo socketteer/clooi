@@ -26,7 +26,6 @@ const DEFAULT_PARTICIPANTS = {
         defaultMessageType: 'message',
     },
 };
-    
 
 export default class BingAIClient extends ChatClient {
     constructor(options) {

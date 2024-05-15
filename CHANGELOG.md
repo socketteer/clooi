@@ -1,6 +1,18 @@
 # Change log
 
-## [Unreleased] - 2024-03-29
+## 2024-05-07
+
+### Impacts user experience
+* Updated Bing cookie, Sydney access restored
+* added chatGPT client (openAI chat API)
+* added parallel completions for Claude
+* consecutive messages from the user or assistant are now automatically merged by the client, and don't need to be manually merged by the user
+* display system message at top of conversations
+
+### Other
+* refactored ChatClient classes
+
+## 2024-03-29
 
 ### Important
 * Interrupting a streaming message will now add the partial message to the conversation
