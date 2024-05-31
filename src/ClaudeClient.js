@@ -47,7 +47,7 @@ export default class ClaudeClient extends ChatClient {
         this.modelOptions = CLAUDE_DEFAULT_MODEL_OPTIONS;
         this.participants = CLAUDE_PARTICIPANTS;
         this.modelInfo = CLAUDE_MODEL_INFO;
-        this.n = 3;
+        this.n = 1;
         this.setOptions(options);
     }
 
@@ -55,6 +55,9 @@ export default class ClaudeClient extends ChatClient {
         super.setOptions(options);
         if (this.options.openaiApiKey) {
             this.apiKey = this.options.anthropicApiKey;
+        }
+        if (this.options.n) {
+            this.n = this.options.n;
         }
         return this;
     }
@@ -81,13 +84,16 @@ export default class ClaudeClient extends ChatClient {
             return;
         }
         if (message.type === 'content_block_delta') {
-            if (!replies[idx]) {
-                replies[idx] = '';
+            if (message?.delta?.text) {
+                if (!replies[idx]) {
+                    replies[idx] = '';
+                }
+                replies[idx] += message.delta.text;
+                opts.onProgress(message.delta.text, idx);
             }
-            replies[idx] += message.delta.text;
-            if (idx === 0) {
-                opts.onProgress(message.delta.text);
-            }
+            // if (idx === 0) {
+            //     opts.onProgress(message.delta.text);
+            // }
         } else {
             // console.debug(progressMessage);
         }
@@ -122,6 +128,7 @@ export default class ClaudeClient extends ChatClient {
     }
 
     buildApiParams(userMessage, previousMessages = [], systemMessage = null) {
+        // const maxHistoryLength = 20;
         const { messages: history, system } = super.buildApiParams(userMessage, previousMessages, systemMessage);
         // merge all consecutive messages from the same author
         const mergedMessageHistory = [];
@@ -135,8 +142,8 @@ export default class ClaudeClient extends ChatClient {
             }
         }
         return {
-            messages: mergedMessageHistory,
-            system,
+            messages: mergedMessageHistory, //.slice(-maxHistoryLength),
+            ...(system ? { system } : {}),
         };
     }
 

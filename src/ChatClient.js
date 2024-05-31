@@ -160,8 +160,13 @@ export default class ChatClient {
     }
 
     async sendMessage(message, opts = {}) {
-        if (opts.clientOptions && typeof opts.clientOptions === 'object') {
+        if (opts.clientOptions) {
+            // && typeof opts.clientOptions === 'object') {
+            // console.log('opts.clientOptions:', opts.clientOptions);
             this.setOptions(opts.clientOptions);
+        }
+        if (opts.n) {
+            this.n = opts.n;
         }
 
         let {
@@ -223,7 +228,7 @@ export default class ChatClient {
         return {
             conversationId,
             parentId: completionParentId,
-            messageId: botConversationMessage.id,
+            messageId: botConversationMessage?.id,
             messages: conversation.messages,
             apiParams,
             response: result,
@@ -252,17 +257,17 @@ export default class ChatClient {
         }
 
         if (!token || token === this.endToken) {
-            if (this.options.debug) {
-                console.debug('encountered end token');
-            }
-            if (index === 0) {
-                if (opts.onFirstMessageDone) {
-                    if (this.options.debug) {
-                        console.debug('calling onFirstMessageDone');
-                    }
-                    opts.onFirstMessageDone(replies[0]);
-                }
-            }
+            // if (this.options.debug) {
+            //     console.debug('encountered end token');
+            // }
+            // if (index === 0) {
+            //     if (opts.onFirstMessageDone) {
+            //         if (this.options.debug) {
+            //             console.debug('calling onFirstMessageDone');
+            //         }
+            //         opts.onFirstMessageDone(replies[0]);
+            //     }
+            // }
             return;
         }
         if (index !== undefined) {
@@ -270,10 +275,11 @@ export default class ChatClient {
                 replies[index] = '';
             }
             replies[index] += token;
-            if (index === 0) {
-                opts.onProgress(token);
-                // reply += token;
-            }
+            opts.onProgress(token, index);
+            // if (index === 0) {
+            //     opts.onProgress(token);
+            //     // reply += token;
+            // }
         }
     }
 

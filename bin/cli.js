@@ -142,6 +142,12 @@ async function loadSettings() {
         console.log(tryBoxen('Welcome to the Bingleton Backrooms CLooI', {
             title: '😊', padding: 0.7, margin: 1, titleAlignment: 'center', borderStyle: 'arrow', borderColor: 'gray',
         }));
+    } else if (clientToUse === 'claude') {
+        const claudeAscii = fs.readFileSync('./contexts/claudeLoomAscii.txt', 'utf8');
+        // console.log(claudeAscii);
+        console.log(tryBoxen(claudeAscii, {
+            padding: 0, margin: 1, borderStyle: 'none', float: 'center',
+        }));
     } else {
         console.log(tryBoxen(`${getAILabel()} CLooI`, {
             padding: 0.7, margin: 1, borderStyle: 'double', dimBorder: true,
@@ -480,7 +486,8 @@ async function generateMessage(message = null) {
     if (message) {
         console.log(userMessageBox(message));
     }
-    let reply = '';
+    // let reply = '';
+    let replies = {};
     const spinnerPrefix = `${getAILabel()} is typing...`;
     const spinner = ora(spinnerPrefix);
     spinner.prefixText = '\n   ';
@@ -504,15 +511,23 @@ async function generateMessage(message = null) {
             ...clientOptions.messageOptions,
             ...clientOptions.clientOptions,
             abortController: controller,
-            onProgress: (diff, data) => {
-                reply += diff;
-                const output = aiMessageBox(reply.trim());
-                spinner.text = `${spinnerPrefix}\n${output}`;
+            onProgress: (diff, idx, data) => {
+                if (diff) {
+                    if (!replies[idx]) {
+                        replies[idx] = '';
+                    }
+                    replies[idx] += diff;
+                    // reply += diff;
+                    if (idx === 0) {
+                        const output = aiMessageBox(replies[idx].trim());
+                        spinner.text = `${spinnerPrefix}\n${output}`;
+                    }
+                }
                 if (data) {
                     eventLog.push(data);
                 }
                 responseData = {
-                    textSoFar: reply,
+                    replies,
                     eventLog,
                 };
             },
@@ -544,8 +559,8 @@ async function generateMessage(message = null) {
             default:
                 conversationData = {
                     ...conversationData,
-                    conversationId: response.conversationId,
                     parentMessageId: response.messageId,
+                    conversationId: response.conversationId,
                 };
                 break;
         }
@@ -562,11 +577,26 @@ async function generateMessage(message = null) {
         console.log(`${boxes}${suggestions}`);
     } catch (error) {
         spinner.stop();
+        console.log(error);
         // if request was aborted by user
-        if (reply && conversationData.parentMessageId) {
-            const aiMessage = client.buildMessage({ text: reply, author: 'assistant' }, conversationData.parentMessageId);
-            const aiConversationMessage = client.createConversationMessage(aiMessage, conversationData.parentMessageId);
-            return addMessages(aiConversationMessage);
+        if (replies && conversationData.parentMessageId) {
+            // console.log(replies);
+            const newConversationMessages = [];
+            for (const [index, text] of Object.entries(replies)) {
+                if (text.trim()) {
+                    const simpleMessage = client.buildMessage(text.trim(), client.names.bot.author);
+                    newConversationMessages.push(client.createConversationMessage(simpleMessage, conversationData.parentMessageId));
+                }
+            }
+            if (newConversationMessages.length === 0) {
+                logWarning('No messages.');
+                console.log(replies);
+                return conversation();
+            }
+            const convoTree = await client.conversationsCache.get(getConversationId());
+            convoTree.messages.push(...newConversationMessages);
+            await client.conversationsCache.set(getConversationId(), convoTree);
+            return selectMessage(newConversationMessages[0].id);
         }
         throw error;
     }
@@ -836,7 +866,7 @@ async function useEditor() {
             waitUserInput: false,
         },
     ]);
-    message = message.trim();
+    //message = message.trim();
     if (!message) {
         return conversation();
     }
@@ -908,6 +938,10 @@ async function mergeUp() {
     await client.conversationsCache.set(getConversationId(), convoTree);
     logSuccess(`Merged message ${currentMessage.id} into parent message ${parentMessage.id} and created new message ${newMessage.id}.`);
     return selectMessage(newMessage.id);
+}
+
+async function splitMessage(nodeIndex=null, delimiter='\n', splitIndex=null) {
+    return;
 }
 
 async function saveConversationState(name = null, data = conversationData) {

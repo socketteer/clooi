@@ -1,8 +1,15 @@
 # Change log
 
+## 2024-5-31
+
+### Impacts UX
+* Anthropic API n param now working from settings
+* If messages are interrupted or there is an error, all partially streamed messages are now saved
+* Fixed bug where Anthropic API doesn't work if system prompt is empty/null
+
 ## 2024-05-07
 
-### Impacts user experience
+### Impacts UX
 * Updated Bing cookie, Sydney access restored
 * added chatGPT client (openAI chat API)
 * added parallel completions for Claude
