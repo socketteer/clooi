@@ -59,8 +59,9 @@ export default class ChatClient {
         this.apiMessageSchema = DEFAULT_API_MESSAGE_SCHEMA;
         this.modelInfo = DEFAULT_MODEL_INFO;
         this.modelPointers = {};
+        this.n = null;
         this.setOptions(options);
-        // this.options.debug = true;
+        this.options.debug = true;
     }
 
     setOptions(options) {
@@ -135,7 +136,7 @@ export default class ChatClient {
         };
     }
 
-    buildMessage(message = '', author = null, type = null) {
+    buildMessage(message = '', author = null, type = null, opts={}) {
         const text = message?.text || message;
         author = message?.author || author;
         type = message?.type || type;
@@ -143,11 +144,12 @@ export default class ChatClient {
             author: author || this.participants.user.author,
             text,
             type: type || this.participants[author]?.defaultMessageType || 'message',
+            ...opts,
         };
         return basicMessage;
     }
 
-    buildApiParams(userMessage, previousMessages = [], systemMessage = null) {
+    buildApiParams(userMessage = null, previousMessages = [], systemMessage = null) {
         const history = [
             ...userMessage ? [userMessage] : [],
             ...previousMessages,
@@ -159,81 +161,92 @@ export default class ChatClient {
         };
     }
 
-    async sendMessage(message, opts = {}) {
-        if (opts.clientOptions) {
-            // && typeof opts.clientOptions === 'object') {
-            // console.log('opts.clientOptions:', opts.clientOptions);
+    async yieldGenContext(userMessage, modelOptions = {}, opts = {}) {
+        if (opts.clientOptions && typeof opts.clientOptions === 'object') {
             this.setOptions(opts.clientOptions);
-        }
-        if (opts.n) {
-            this.n = opts.n;
         }
 
         let {
-            conversationId = null,
-            onProgress,
-            systemMessage = null,
+            conversationId,
+            systemMessage,
         } = opts;
 
         const {
+            saveToCache = false,
             parentMessageId,
-            saveToCache = true,
         } = opts;
-
-        if (typeof onProgress !== 'function') {
-            onProgress = () => {};
-        }
 
         if (conversationId === null) {
             conversationId = crypto.randomUUID();
         }
-        const { parentId, previousMessages, conversation } = await this.buildConversationHistory(conversationId, parentMessageId);
 
-        let userMessage;
-        if (message) {
-            userMessage = this.buildMessage(message, this.participants.user.author);
+        const {
+            parentId,
+            previousMessages,
+            conversation,
+        } = await this.buildConversationHistory(conversationId, parentMessageId);
+
+        if (typeof systemMessage === 'string' && systemMessage.length) {
+            systemMessage = this.buildMessage(systemMessage, this.participants.system.author);
+        }
+        if (typeof userMessage === 'string' && userMessage.length) {
+            userMessage = this.buildMessage(userMessage, this.participants.user.author);
         }
 
         let userConversationMessage;
-        if (saveToCache && userMessage) {
+        if (userMessage && saveToCache) {
             userConversationMessage = this.createConversationMessage(userMessage, parentId);
             conversation.messages.push(userConversationMessage);
+            await this.conversationsCache.set(conversationId, conversation);
         }
 
-        if (systemMessage) {
-            systemMessage = this.buildMessage(systemMessage, this.participants.system.author);
-        }
+        const completionParentId = userConversationMessage ? userConversationMessage.id : parentId;
 
-        const completionParentId = userConversationMessage ? userConversationMessage.id : parentMessageId;
+        const apiParams = {
+            ...modelOptions,
+            ...this.buildApiParams(userMessage, previousMessages, systemMessage, { ...modelOptions, ...opts }),
+        };
 
-        const apiParams = this.buildApiParams(userMessage, previousMessages, systemMessage);
-        if (this.options.debug) {
-            console.debug('apiParams:', apiParams);
-            console.debug('opts:', opts);
-            console.debug('userConversationMessage:', userConversationMessage);
-        }
+        return {
+            apiParams,
+            conversationId,
+            completionParentId,
+            userConversationMessage,
+            conversation,
+        };
+    }
+
+    async sendMessage(message, modelOptions = {}, opts = {}) {
+        const {
+            apiParams,
+            conversationId,
+            completionParentId,
+            userConversationMessage,
+            conversation,
+        } = await this.yieldGenContext(message, modelOptions, opts);
+
         const { result, replies } = await this.callAPI(apiParams, opts);
-        const newConversationMessages = [];
-        for (const [index, text] of Object.entries(replies)) {
-            const simpleMessage = this.buildMessage(text.trim(), this.participants.bot.author);
-            newConversationMessages.push(this.createConversationMessage(simpleMessage, completionParentId));
-        }
 
-        if (saveToCache) {
+        const newConversationMessages = [];
+        if (opts.saveToCache) {
+            for (const text of Object.values(replies)) {
+                const simpleMessage = this.buildMessage(text.trim(), this.participants.bot.author);
+                newConversationMessages.push(this.createConversationMessage(simpleMessage, completionParentId));
+            }
             conversation.messages.push(...newConversationMessages);
             await this.conversationsCache.set(conversationId, conversation);
         }
-        const botConversationMessage = newConversationMessages[0];
+        // const botConversationMessage = newConversationMessages[0];
 
         return {
+            result,
+            replies,
             conversationId,
-            parentId: completionParentId,
-            messageId: botConversationMessage?.id,
-            messages: conversation.messages,
             apiParams,
-            response: result,
-            replies: newConversationMessages,
-            details: null,
+            opts,
+            completionParentId,
+            userConversationMessage,
+            newConversationMessages,
         };
     }
 
@@ -245,41 +258,32 @@ export default class ChatClient {
 
     onProgressWrapper(message, replies, opts) {
         if (message === '[DONE]') {
-            // if (opts.onAllMessagesDone) {
-            //     opts.onAllMessagesDone(result, replies);
-            // }
             return;
         }
-        const index = message.choices[0]?.index;
+        if (!message.choices) {
+            // console.debug('no choices, message:', message);
+            return;
+        }
+        const idx = message.choices[0]?.index;
+
+        this.onProgressIndexical(message, replies, idx, opts);
+    }
+
+    onProgressIndexical(message, replies, idx, opts) {
         const token = this.isChatGptModel ? message.choices[0]?.delta.content : message.choices[0]?.text;
-        if (this.options.debug) {
-            console.debug('token:', token);
+
+        if (idx !== undefined) {
+            if (token && token !== this.endToken) {
+                if (!replies[idx]) {
+                    replies[idx] = '';
+                }
+                replies[idx] += token;
+                opts.onProgress(token, idx);
+            }
         }
 
-        if (!token || token === this.endToken) {
-            // if (this.options.debug) {
-            //     console.debug('encountered end token');
-            // }
-            // if (index === 0) {
-            //     if (opts.onFirstMessageDone) {
-            //         if (this.options.debug) {
-            //             console.debug('calling onFirstMessageDone');
-            //         }
-            //         opts.onFirstMessageDone(replies[0]);
-            //     }
-            // }
-            return;
-        }
-        if (index !== undefined) {
-            if (!replies[index]) {
-                replies[index] = '';
-            }
-            replies[index] += token;
-            opts.onProgress(token, index);
-            // if (index === 0) {
-            //     opts.onProgress(token);
-            //     // reply += token;
-            // }
+        if (message.choices[0]?.finish_reason) {
+            opts.onFinished(idx, null, message.choices[0]?.finish_reason);
         }
     }
 
@@ -291,47 +295,56 @@ export default class ChatClient {
 
     async callAPI(params, opts = {}) {
         // let reply = '';
+
+        const modelOptions = {
+            ...this.modelOptions,
+            ...params,
+        };
+        if (modelOptions.stream) {
+            if (typeof opts.onProgress !== 'function') {
+                opts.onProgress = () => {};
+            }
+            if (typeof opts.onFinished !== 'function') {
+                opts.onFinished = () => {};
+            }
+        }
+        const n = opts.n || this.n || null;
+
         let result = null;
         const replies = {};
-        const stream = typeof opts.onProgress === 'function' && this.modelOptions.stream;
-        result = await this.getCompletion(
-            params,
-            this.getHeaders(),
-            stream ? (progressMessage) => {
-                this.onProgressWrapper(progressMessage, replies, opts);
-            } : null,
+
+        const completion = async onProgress => this.getCompletion(
+            modelOptions,
+            modelOptions.stream ? onProgress : null,
             opts.abortController || new AbortController(),
         );
-        if (!stream) {
-            // if (this.options.debug) {
-            //     console.debug(JSON.stringify(result));
-            // }
+
+        // console.log('params:', params);
+        // console.log(opts);
+        // console.log(n);
+
+        if (n) {
+            result = await Promise.all([...Array(n).keys()].map(async idx => completion(
+                message => this.onProgressIndexical(message, replies, idx, opts),
+            )));
+        } else {
+            result = await completion(message => this.onProgressWrapper(message, replies, opts));
+        }
+        if (!modelOptions.stream) {
             this.parseReplies(result, replies);
         }
-        // if (this.options.debug) {
-        //     console.debug('result:', JSON.stringify(result));
-        //     console.debug('replies:', replies);
-        // }
-
-        // if (opts.onAllMessagesDone) {
-        //     opts.onAllMessagesDone(result, replies);
-        // }
         return {
             result,
             replies,
         };
     }
 
-    async getCompletion(params, headers, onProgress, abortController, debug = false) {
-        const modelOptions = {
-            ...this.modelOptions,
-            ...params,
-        };
+    async getCompletion(modelOptions, onProgress, abortController, debug = false) {
         const opts = {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                ...headers,
+                ...this.getHeaders(),
             },
             body: JSON.stringify(modelOptions),
             dispatcher: new Agent({
@@ -340,8 +353,8 @@ export default class ChatClient {
             }),
         };
 
-        if (this.options.debug) {
-            console.debug('request body:', modelOptions);
+        if (debug) {
+            console.debug('model options:', modelOptions);
         }
 
         const url = this.completionsUrl;
@@ -441,29 +454,46 @@ export default class ChatClient {
         return response.json();
     }
 
-    async addMessages(conversationId, messages, parentMessageId = null) {
+    async addMessages(conversationId, messages, parentMessageId = null, chain = true) {
+        // if chain is true, messages will be added in a consecutive chain
+        // otherwise, they will be added in parallel to the same parent
         if (!conversationId) {
             conversationId = crypto.randomUUID();
         }
-
         const conversation = (await this.conversationsCache.get(conversationId)) || {
             messages: [],
             createdAt: Date.now(),
         };
-
         parentMessageId = parentMessageId || conversation.messages[conversation.messages.length - 1]?.id || crypto.randomUUID();
 
-        // create new conversation messages
-        const newConversationMessages = this.createConversationMessages(
-            messages,
-            parentMessageId,
-        );
-        conversation.messages = conversation.messages.concat(newConversationMessages);
+        let newConversationMessages;
+        if (chain) {
+            newConversationMessages = this.createConversationMessages(
+                messages,
+                parentMessageId,
+            );
+            conversation.messages = conversation.messages.concat(newConversationMessages);
+            // messageId = conversation.messages[conversation.messages.length - 1].id;
+        } else {
+            newConversationMessages = [];
+            for (const message of messages) {
+                const conversationMessage = this.createConversationMessage(
+                    message,
+                    parentMessageId,
+                );
+                newConversationMessages.push(conversationMessage);
+            }
+            conversation.messages.push(...newConversationMessages);
+        }
+        const messageId = newConversationMessages[newConversationMessages.length - 1].id;
+
         await this.conversationsCache.set(conversationId, conversation);
         return {
             conversationId,
-            messageId: conversation.messages[conversation.messages.length - 1].id,
+            messageId,
+            newConversationMessages,
             messages: conversation.messages,
+            parentMessageId,
         };
     }
 
@@ -507,7 +537,7 @@ export default class ChatClient {
         return conversions.toTranscript(this.toMessages(history));
     }
 
-    createConversationMessage(message, parentMessageId) {
+    createConversationMessage(message, parentMessageId, opts = {}) {
         const role = this.convertAlias('author', 'display', message.author);
         return {
             id: crypto.randomUUID(),
@@ -516,6 +546,8 @@ export default class ChatClient {
             message: message.text,
             ...(message.type ? { type: message.type } : {}),
             ...(message.details ? { details: message.details } : {}),
+            ...opts,
+            // ...(opts || {}),
         };
     }
 
@@ -550,5 +582,9 @@ export default class ChatClient {
 
     getTokenCount(text) {
         return this.gptEncoder.encode(text, 'all').length;
+    }
+
+    static getUserSuggestions(message) {
+        return message?.suggestedResponses || null;
     }
 }

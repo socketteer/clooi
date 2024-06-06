@@ -2,10 +2,69 @@ import * as fs from 'fs';
 
 export const bingCookie = fs.readFileSync('./src/bingCookie.txt', 'utf8');
 
-export const requestOptions = (saveMem = false) => ({
+export const messageInfo = {
+    // locale: 'en-US',
+    // market: 'en-US',
+    // region: 'US',
+    // location: 'lat:47.639557;long:-122.128159;re=1000m;',
+    // locationHints: [
+    //     {
+    //         SourceType: 1,
+    //         RegionType: 2,
+    //         Center: {
+    //             Latitude: 37.75870132446289,
+    //             Longitude: -122.4811019897461,
+    //         },
+    //         Radius: 24902,
+    //         Name: 'San Francisco, California',
+    //         Accuracy: 24902,
+    //         FDConfidence: 0.8999999761581421,
+    //         CountryName: 'United States',
+    //         CountryConfidence: 9,
+    //         Admin1Name: 'California',
+    //         PopulatedPlaceName: 'San Francisco',
+    //         PopulatedPlaceConfidence: 9,
+    //         PostCodeName: '94122',
+    //         UtcOffset: -8,
+    //         Dma: 807,
+    //     },
+    // ],
+    // userIpAddress: '135.180.64.190',
+    // timestamp: '2024-03-14T06:42:40-07:00',
+};
+
+export const newConversationHeaders = {
+    accept: 'application/json',
+    'accept-language': 'en-US,en;q=0.9',
+    'content-type': 'application/json',
+    'sec-ch-ua':
+        '"Microsoft Edge";v="113", "Chromium";v="113", "Not-A.Brand";v="24"',
+    'sec-ch-ua-arch': '"x86"',
+    'sec-ch-ua-bitness': '"64"',
+    'sec-ch-ua-full-version': '"113.0.1774.50"',
+    'sec-ch-ua-full-version-list':
+        '"Microsoft Edge";v="113.0.1774.50", "Chromium";v="113.0.5672.127", "Not-A.Brand";v="24.0.0.0"',
+    'sec-ch-ua-mobile': '?0',
+    'sec-ch-ua-model': '""',
+    'sec-ch-ua-platform': '"Windows"',
+    'sec-ch-ua-platform-version': '"15.0.0"',
+    'sec-fetch-dest': 'empty',
+    'sec-fetch-mode': 'cors',
+    'sec-fetch-site': 'same-origin',
+    'sec-ms-gec-version': '1-115.0.1866.1',
+    'x-ms-useragent':
+        'azsdk-js-api-client-factory/1.0.0-beta.1 core-rest-pipeline/1.10.0 OS/Win32',
+    'user-agent':
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/113.0.0.0 Safari/537.36 Edg/113.0.1774.50',
+    Referer: 'https://www.bing.com/search?q=Bing+AI&showconv=1',
+    'Referrer-Policy': 'origin-when-cross-origin',
+};
+
+export const requestOptions = (saveMem = false, imageGen = false) => ({
     source: 'cib-ccp',
     optionsSets: [
         'nlu_direct_response_filter',
+        // 'enable_debug_commands',
         'deepleo',
         'disable_emoji_spoken_text',
         'responsible_ai_policy_235',
@@ -21,7 +80,7 @@ export const requestOptions = (saveMem = false) => ({
         'vidtoppb',
         'eredirecturl',
         'clgalileo',
-        'gencontentv3',
+        ...imageGen ? ['gencontentv3'] : [],
         'enable_user_consent',
         'fluxmemcst',
         ...saveMem ? ['autosave'] : [],
@@ -66,102 +125,11 @@ export const requestOptions = (saveMem = false) => ({
     plugins: [
         { id: 'c310c353-b9f0-4d76-ab0d-1dd5e979cf68', category: 1 },
     ],
-    // traceId: '65f2fecfc6404aa6858538f506e89505',
-    // requestId: '12806909-a89f-ba2c-9827-66a95810f348',
-
-    conversationHistoryOptionsSets: saveMem ? [
-        'autosave',
-        'savemem',
-        'uprofupd',
-        'uprofgen',
-    ] : [
+    conversationHistoryOptionsSets: [
+        ...saveMem ? ['autosave'] : [],
         'savemem',
         'uprofupd',
         'uprofgen',
     ],
     gptId: 'copilot', // wtf does this do?
 });
-
-// const obj = {
-//     arguments: [
-//         {
-//             source: 'cib',
-//             optionsSets: [
-//                 'nlu_direct_response_filter',
-//                 'deepleo',
-//                 'disable_emoji_spoken_text',
-//                 'responsible_ai_policy_235',
-//                 'enablemm',
-//                 toneOption,
-//                 'dtappid',
-//                 'cricinfo',
-//                 'cricinfov2',
-//                 'dv3sugg',
-//                 'nojbfedge',
-//                 ...(toneStyle === 'creative' && this.options.features.genImage
-//                     ? ['gencontentv3']
-//                     : []),
-//             ],
-//             sliceIds: ['222dtappid', '225cricinfo', '224locals0'],
-//             traceId: genRanHex(32),
-//             isStartOfSession: invocationId === 0,
-//             message: {
-//                 author: 'user',
-//                 text: userMessageInjection,
-//                 // messageType: jailbreakConversationId ? 'SearchQuery' : 'Chat',
-//                 // I'm still not sure why waylaidwanderer's original code sets messageType to 'SearchQuery'
-//                 // It doesn't seem to make a difference in my tests
-//                 messageType: 'Chat',
-//             },
-//             tone: toneOption,
-//             encryptedConversationSignature,
-//             participant: {
-//                 id: clientId,
-//             },
-//             conversationId,
-//             previousMessages: [],
-//         },
-//     ],
-//     invocationId: invocationId.toString(),
-//     target: 'chat',
-//     type: 4, // streaming?
-// };
-
-// message: {
-//     locale: 'en-US',
-//     market: 'en-US',
-//     region: 'US',
-//     location: 'lat:47.639557;long:-122.128159;re=1000m;',
-//     locationHints: [
-//         {
-//             SourceType: 1,
-//             RegionType: 2,
-//             Center: {
-//                 Latitude: 37.75870132446289,
-//                 Longitude: -122.4811019897461,
-//             },
-//             Radius: 24902,
-//             Name: 'San Francisco, California',
-//             Accuracy: 24902,
-//             FDConfidence: 0.8999999761581421,
-//             CountryName: 'United States',
-//             CountryConfidence: 9,
-//             Admin1Name: 'California',
-//             PopulatedPlaceName: 'San Francisco',
-//             PopulatedPlaceConfidence: 9,
-//             PostCodeName: '94122',
-//             UtcOffset: -8,
-//             Dma: 807,
-//         },
-//     ],
-//     userIpAddress: '135.180.64.190',
-//     timestamp: '2024-03-14T06:42:40-07:00',
-
-//     inputMethod: 'Keyboard',
-// }
-
-// conversationId: '51D|BingProd|DB9A31B51D10AFD82FBB6344ACFE6A3F881D1A8CFD4C67EB99D6AFF783B4751E',
-// export const clientId = '844425080613716';
-
-// requestId: '12806909-a89f-ba2c-9827-66a95810f348',
-// messageId: '12806909-a89f-ba2c-9827-66a95810f348',

@@ -110,7 +110,7 @@ export default class ChatGPTClient extends ChatClient {
         return tokenizer;
     }
 
-    buildApiParams(userMessage, previousMessages = [], systemMessage = null) {
+    buildApiParams(userMessage = null, previousMessages = [], systemMessage = null) {
         const history = [
             ...systemMessage ? [systemMessage] : [],
             ...previousMessages,

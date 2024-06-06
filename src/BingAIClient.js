@@ -6,9 +6,7 @@ import { Agent, ProxyAgent } from 'undici';
 import { HttpsProxyAgent } from 'https-proxy-agent';
 import { BingImageCreator } from '@timefox/bic-sydney';
 import ChatClient from './ChatClient.js';
-import { getMessagesForConversation } from './conversation.js';
-import { bingCookie, requestOptions } from './bingConfig.js';
-
+import { requestOptions, newConversationHeaders, bingCookie } from './bingConfig.js';
 /**
  * https://stackoverflow.com/a/58326357
  * @param {number} size
@@ -17,53 +15,54 @@ const genRanHex = size => [...Array(size)]
     .map(() => Math.floor(Math.random() * 16).toString(16))
     .join('');
 
-const messageHistoryInjection = false;
-
-const DEFAULT_PARTICIPANTS = {
+const BING_PARTICIPANTS = {
     bot: {
         display: 'Bing',
         author: 'assistant',
         defaultMessageType: 'message',
     },
+    system: {
+        display: 'System',
+        author: 'system',
+        defaultMessageType: 'additional_instructions',
+    },
+};
+
+const BING_DEFAULT_MODEL_OPTIONS = {
+    toneStyle: 'creative', // creative, precise, balanced, or fast
+    stream: true,
+
+    city: 'Redmond, Washington',
+    country: 'United States',
+    messageText: 'Continue the conversation in context. Assistant:', // content of user message if nothing is injected there
 };
 
 export default class BingAIClient extends ChatClient {
     constructor(options) {
         options.cache.namespace = options.cache.namespace || 'bing';
         super(options);
-        this.participants = DEFAULT_PARTICIPANTS;
+        this.modelOptions = BING_DEFAULT_MODEL_OPTIONS;
+        this.participants = BING_PARTICIPANTS;
+        this.stopToken = '\n\n[user](#message)';
         this.setOptions(options);
     }
 
     setOptions(options) {
         // don't allow overriding cache options for consistency with other clients
-        delete options.cache;
-        if (this.options && !this.options.replaceOptions) {
-            this.options = {
-                ...this.options,
-                ...options,
-            };
-        } else {
-            this.options = {
-                ...options,
-                host: options.host || 'https://www.bing.com',
-                xForwardedFor: this.constructor.getValidIPv4(
-                    options.xForwardedFor,
-                ),
-                features: {
-                    genImage: options?.features?.genImage || false,
-                },
-            };
-        }
-
-        const participants = this.options.participants || {};
-        this.participants = {
-            ...DEFAULT_PARTICIPANTS,
-            ...this.participants,
-            ...participants,
+        // delete options.cache;
+        super.setOptions(options);
+        this.options = {
+            ...options,
+            host: options.host || 'https://www.bing.com',
+            xForwardedFor: this.constructor.getValidIPv4(
+                options.xForwardedFor,
+            ),
+            features: {
+                genImage: true,
+                // genImage: false,
+                // genImage: options?.features?.genImage || false,
+            },
         };
-
-        // this.options.features.genImage = true;
         if (this.options.features.genImage) {
             this.bic = new BingImageCreator(this.options);
         }
@@ -97,39 +96,10 @@ export default class BingAIClient extends ChatClient {
 
     async createNewConversation() {
         this.headers = {
-            accept: 'application/json',
-            'accept-language': 'en-US,en;q=0.9',
-            'content-type': 'application/json',
-            'sec-ch-ua':
-                '"Microsoft Edge";v="113", "Chromium";v="113", "Not-A.Brand";v="24"',
-            'sec-ch-ua-arch': '"x86"',
-            'sec-ch-ua-bitness': '"64"',
-            'sec-ch-ua-full-version': '"113.0.1774.50"',
-            'sec-ch-ua-full-version-list':
-                '"Microsoft Edge";v="113.0.1774.50", "Chromium";v="113.0.5672.127", "Not-A.Brand";v="24.0.0.0"',
-            'sec-ch-ua-mobile': '?0',
-            'sec-ch-ua-model': '""',
-            'sec-ch-ua-platform': '"Windows"',
-            'sec-ch-ua-platform-version': '"15.0.0"',
-            'sec-fetch-dest': 'empty',
-            'sec-fetch-mode': 'cors',
-            'sec-fetch-site': 'same-origin',
+            ...newConversationHeaders,
             'sec-ms-gec': genRanHex(64).toUpperCase(),
-            'sec-ms-gec-version': '1-115.0.1866.1',
-            // 'sec-websocket-key': '6L+W8WUuesNkqM5CBzd/DQ==',
             'x-ms-client-request-id': crypto.randomUUID(),
-            'x-ms-useragent':
-                'azsdk-js-api-client-factory/1.0.0-beta.1 core-rest-pipeline/1.10.0 OS/Win32',
-            'user-agent':
-                'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/113.0.0.0 Safari/537.36 Edg/113.0.1774.50',
-            cookie:
-                this.options.cookies || bingCookie,
-                // this.options.cookies
-                // || (this.options.userToken
-                //     ? `_U=${this.options.userToken}`
-                //     : undefined),
-            Referer: 'https://www.bing.com/search?q=Bing+AI&showconv=1',
-            'Referrer-Policy': 'origin-when-cross-origin',
+            cookie: this.options.cookies || bingCookie,
             // Workaround for request being blocked due to geolocation
             // 'x-forwarded-for': '1.1.1.1', // 1.1.1.1 seems to no longer work.
             ...(this.options.xForwardedFor
@@ -164,6 +134,27 @@ export default class BingAIClient extends ChatClient {
             res.encryptedConversationSignature = response.headers.get(
                 'x-sydney-encryptedconversationsignature',
             ) ?? null;
+            if (
+                !res.encryptedConversationSignature
+                || !res.conversationId
+                || !res.clientId
+            ) {
+                const resultValue = res.result?.value;
+                if (resultValue) {
+                    const e = new Error(
+                        res.result.message,
+                    ); // default e.name is 'Error'
+                    e.name = resultValue; // such as "UnauthorizedRequest"
+                    throw e;
+                }
+                throw new Error(
+                    `Unexpected response:\n${JSON.stringify(
+                        res,
+                        null,
+                        2,
+                    )}`,
+                );
+            }
             return res;
         } catch (err) {
             throw new Error(
@@ -244,42 +235,48 @@ export default class BingAIClient extends ChatClient {
         ws.removeAllListeners();
     }
 
-    static bingRequest(messageText, options) {
+    static bingRequest(options) {
         const {
+            messageText = 'Continue the conversation in context. Assistant:',
+            toneStyle = 'creative',
+            city = 'Ann Arbor, Michigan',
+            country = 'United States',
+            contextDescription = null,
+            sourceName = null,
+            sourceUrl = null,
             conversationId,
             clientId,
-            toneStyle = 'creative',
             encryptedConversationSignature,
             invocationId = 0,
             saveMem = false,
         } = options;
 
         let tone;
-        if (toneStyle === 'creative') {
-            // toneOption = 'h3imaginative';
-            tone = 'CreativeClassic';
-        } else if (toneStyle === 'precise') {
-            tone = 'h3precise';
-        } else if (toneStyle === 'fast') {
-            // new "Balanced" mode, allegedly GPT-3.5 turbo
-            tone = 'galileo';
-        } else if (toneStyle === 'balanced') {
-            // old "Balanced" mode
-            tone = 'harmonyv3';
-        } else {
-            tone = toneStyle;
+        switch (toneStyle.toLowerCase()) {
+            case 'creative': tone = 'CreativeClassic'; break;
+            case 'precise': tone = 'h3precise'; break;
+            case 'fast': tone = 'galileo'; break;
+            case 'balanced': tone = 'harmonyv3'; break;
+            default: tone = toneStyle;
         }
 
         return {
             arguments: [
                 {
-                    ...requestOptions(saveMem),
+                    ...requestOptions(saveMem, this.genImage),
                     isStartOfSession: invocationId === 0,
                     traceId: genRanHex(32),
                     message: {
                         author: 'user',
                         text: messageText,
                         messageType: 'Chat',
+                        locationInfo: {
+                            // State: 'California',
+                            City: city,
+                            Country: country,
+                            CountryConfidence: 9,
+                            CityConfidence: 9,
+                        },
                     },
                     tone,
                     extraExtensionParameters: {
@@ -291,7 +288,17 @@ export default class BingAIClient extends ChatClient {
                     participant: {
                         id: clientId,
                     },
-                    previousMessages: [],
+                    ...((contextDescription || sourceName || sourceUrl) ? {
+                        previousMessages: [{
+                            author: 'user',
+                            description: contextDescription || '',
+                            contextType: 'WebPage',
+                            messageType: 'Context',
+                            messageId: 'discover-web--page-ping-mriduna-----',
+                            ...sourceName ? { sourceName } : {},
+                            ...sourceUrl ? { sourceUrl } : {},
+                        }],
+                    } : {}),
                 },
             ],
             invocationId: invocationId.toString(),
@@ -300,252 +307,145 @@ export default class BingAIClient extends ChatClient {
         };
     }
 
-    async sendMessage(message = '', opts = {}) {
-        if (opts.clientOptions && typeof opts.clientOptions === 'object') {
-            this.setOptions(opts.clientOptions);
+    buildApiParams(userMessage, previousMessages = [], systemMessage = null, opts = {}) {
+        const {
+            context = null,
+            systemInjectSite = 'location', // message, context, or location
+            historyInjectSite = 'location', // context or location
+            messageInjectSite = 'message', // context or location
+        } = opts;
+
+        // console.log('systemMessage', systemMessage);
+        // console.log('previousMessages', previousMessages);
+        // console.log('userMessage', userMessage);
+
+        if (!userMessage && (messageInjectSite !== historyInjectSite) && previousMessages?.slice(-1)[0]?.author === 'user') {
+            userMessage = previousMessages.pop();
         }
 
+        const locationInjection = [
+            ...(systemMessage && systemInjectSite === 'location') ? [systemMessage] : [],
+            ...(previousMessages && historyInjectSite === 'location') ? previousMessages : [],
+            ...(userMessage && messageInjectSite === 'location') ? [userMessage] : [],
+        ];
+
+        const contextInjection = [
+            ...(systemMessage && systemInjectSite === 'context') ? [systemMessage] : [],
+            ...(previousMessages && historyInjectSite === 'context') ? previousMessages : [],
+            ...(userMessage && messageInjectSite === 'context') ? [userMessage] : [],
+        ];
+
+        const messageText = messageInjectSite === 'message' ? userMessage?.text : null;
+
+        const country = locationInjection ? this.toTranscript(locationInjection) : null;
+
+        let contextDescription = contextInjection ? this.toTranscript(contextInjection) : '';
+        if (context) {
+            contextDescription = `${context}\n\n${contextDescription}`;
+        }
+
+        // let history = [
+        //     ...systemMessage ? [systemMessage] : [],
+        //     ...previousMessages,
+        //     ...userMessage ? [userMessage] : [],
+        // ];
+
+        // let contextInjectionString;
+        // let messageText = userMessageInjection;
+
+        // // prepare messages for prompt injection
+        // if (injectionMethod === 'message' && history.slice(-1)[0]?.author === 'user') {
+        //     history = history.slice(0, -1);
+        //     messageText = previousMessages.slice(-1)[0].text;
+        // }
+
+        // contextInjectionString = this.toTranscript(history);
+        // if (context) {
+        //     contextInjectionString = `${context}\n\n${contextInjectionString}`;
+        // }
+
+        return {
+            ...country ? { country } : {},
+            ...messageText ? { messageText } : {},
+            ...contextDescription ? { contextDescription } : {},
+        };
+    }
+
+    onProgressIndexical(message, replies, idx, opts) {
         let {
-            jailbreakConversationId = false, // set to `true` for the first message to enable jailbreak mode
-            conversationId,
-            encryptedConversationSignature,
-            systemMessage,
-            clientId,
-            onProgress,
-            parentMessageId = jailbreakConversationId === true || jailbreakConversationId === false
-                ? crypto.randomUUID()
-                : null,
-            userMessageInjection = 'Continue the conversation in context. Assistant:',
-        } = opts;
+            diff = null,
+        } = message;
+        const {
+            details = null,
+            finishReason = null,
+        } = message;
 
         const {
-            toneStyle = 'creative', // or creative, precise, fast
-            invocationId = 0,
-            context,
-            abortController = new AbortController(),
-            stopToken = '\n\n[user](#message)',
-            injectionMethod = 'message', // or 'context'
+            stopToken = this.stopToken,
+            onProgress,
+            onFinished,
             censoredMessageInjection = '⚠',
-            appendMessages = [],
         } = opts;
 
-        if (typeof onProgress !== 'function') {
-            onProgress = () => {};
-        }
-
-        if (
-            jailbreakConversationId
-            || !encryptedConversationSignature
-            || !conversationId
-            || !clientId
-        ) {
-            const createNewConversationResponse = await this.createNewConversation();
-            if (this.debug) {
-                console.debug(createNewConversationResponse);
+        if (diff) {
+            if (!replies[idx]) {
+                replies[idx] = '';
             }
-            if (
-                !createNewConversationResponse.encryptedConversationSignature
-                || !createNewConversationResponse.conversationId
-                || !createNewConversationResponse.clientId
-            ) {
-                const resultValue = createNewConversationResponse.result?.value;
-                if (resultValue) {
-                    const e = new Error(
-                        createNewConversationResponse.result.message,
-                    ); // default e.name is 'Error'
-                    e.name = resultValue; // such as "UnauthorizedRequest"
-                    throw e;
-                }
-                throw new Error(
-                    `Unexpected response:\n${JSON.stringify(
-                        createNewConversationResponse,
-                        null,
-                        2,
-                    )}`,
-                );
+
+            if (diff === '⚠') {
+                diff = censoredMessageInjection;
             }
-            ({ encryptedConversationSignature, conversationId, clientId } = createNewConversationResponse);
-        }
 
-        // Due to this jailbreak, the AI will occasionally start responding as the user. It only happens rarely (and happens with the non-jailbroken Bing too), but since we are handling conversations ourselves now, we can use this system to ignore the part of the generated message that is replying as the user.
-        // TODO: probably removable now we're using `[user](#message)` instead of `User:`
-        // const stopToken = '\n\n[user](#message)';
+            replies[idx] += diff;
+            if (replies[idx].trim().endsWith(stopToken)) {
+                // remove stop token from updated text
+                replies[idx] = replies[idx]
+                    .replace(stopToken, '')
+                    .trim();
+                onFinished(idx, details, 'stop token');
 
-        if (jailbreakConversationId === true) {
-            jailbreakConversationId = crypto.randomUUID();
-        }
-
-        const conversationKey = jailbreakConversationId;
-
-        let appendConversationMessages;
-        if (appendMessages.length) {
-            if (!jailbreakConversationId) {
-                appendConversationMessages = this.createConversationMessages(
-                    appendMessages,
-                    parentMessageId,
-                );
-                parentMessageId = appendConversationMessages[appendConversationMessages.length - 1].id;
-            } else {
-                const { messageId } = await this.addMessages(
-                    conversationKey,
-                    appendMessages,
-                    parentMessageId,
-                );
-                parentMessageId = messageId;
+                return;
             }
         }
-
-        let userMessage;
-
-        if (typeof message === 'string' && message.length) {
-            userMessage = {
-                author: 'user',
-                text: message,
-            };
-        } else if (message) {
-            userMessage = message;
+        onProgress(diff, idx, details);
+        if (finishReason) {
+            onFinished(idx, details, finishReason);
         }
+    }
 
-        let conversation;
-        let contextInjectionString;
-        // let chatInjectionString;
+    onProgressWrapper(message, replies, opts) {
+        return this.onProgressIndexical(message, replies, 0, opts);
+    }
 
-        if (typeof systemMessage === 'string' && systemMessage.length) {
-            systemMessage = {
-                text: `${systemMessage}`,
-                author: 'system',
-                type: 'additional_instructions',
-            };
-        } else if (!systemMessage) {
-            systemMessage = null;
-        }
+    async getCompletion(opts, onProgress, abortController) {
+        const { encryptedConversationSignature, conversationId, clientId } = await this.createNewConversation();
 
-        let previousCachedMessages = [];
+        const obj = this.constructor.bingRequest({
+            conversationId,
+            clientId,
+            encryptedConversationSignature,
+            ...opts,
+        });
 
-        if (jailbreakConversationId) {
-            conversation = (await this.conversationsCache.get(conversationKey)) || {
-                messages: [],
-                createdAt: Date.now(),
-            };
-
-            // TODO: limit token usage
-            previousCachedMessages = getMessagesForConversation(
-                conversation.messages,
-                parentMessageId,
-            ).map(msg => this.toBasicMessage(msg));
-        } else {
-            previousCachedMessages = appendMessages || [];
-        }
-
-        const previousMessages = invocationId === 0 ? [
-            ...systemMessage ? [systemMessage] : [],
-            ...previousCachedMessages,
-        ] : undefined;
-
-        if (userMessage) {
-            previousMessages.push(userMessage);
-        }
-        let contextInjectMessages;
-        let userInjectMessages;
-        let lastUserMessage;
-        // find index of last user message and split the array there
-        if (injectionMethod === 'message') {
-            if (messageHistoryInjection) {
-                const lastUserMessageIndex = previousMessages
-                    .map(msg => msg.author)
-                    .lastIndexOf('user');
-                if (lastUserMessageIndex !== -1) {
-                    contextInjectMessages = previousMessages.slice(0, lastUserMessageIndex + 1);
-                    userInjectMessages = previousMessages.slice(lastUserMessageIndex + 1);
-                    lastUserMessage = contextInjectMessages.pop();
-                    userMessageInjection = [lastUserMessage.text, userInjectMessages
-                        ?.map(msg => this.toTranscriptMessage(msg))
-                        .join('\n\n')].join('\n\n').trim();
-                }
-            } else if (previousMessages.slice(-1)[0]?.author === 'user') {
-                contextInjectMessages = previousMessages.slice(0, -1);
-                userMessageInjection = previousMessages.slice(-1)[0].text;
-            } else {
-                contextInjectMessages = previousMessages;
-            }
-        } else {
-            contextInjectMessages = previousMessages;
-        }
-
-        // prepare messages for prompt injection
-        contextInjectionString = this.toTranscript(contextInjectMessages);
-        // contextInjectionString = contextInjectMessages
-        //     ?.map(msg => this.toTranscriptMessage(msg))
-        //     .join('\n\n');
-
-        if (context) {
-            contextInjectionString = `${context}\n\n${contextInjectionString}`;
-        }
-
-        let userConversationMessage;
-        if (userMessage) {
-            userConversationMessage = this.createConversationMessage(
-                userMessage,
-                parentMessageId,
-            );
-            if (jailbreakConversationId) {
-                conversation.messages.push(userConversationMessage);
-                // await this.conversationsCache.set(conversationKey, conversation);
-            }
+        if (this.debug) {
+            console.debug(JSON.stringify(obj, null, 2));
         }
 
         const ws = await this.createWebSocketConnection(
             encryptedConversationSignature,
         );
 
+        abortController = new AbortController();
+
         ws.on('error', (error) => {
-            console.error(error);
+            console.error('ws error:', error);
             abortController.abort();
         });
-
-
-        const obj = this.constructor.bingRequest(userMessageInjection, {
-            conversationId,
-            clientId,
-            toneStyle,
-            encryptedConversationSignature,
-            invocationId,
-        });
-
-        if (contextInjectionString) {
-            obj.arguments[0].previousMessages.push({
-                author: 'user',
-                description: contextInjectionString,
-                contextType: 'WebPage',
-                messageType: 'Context',
-                messageId: 'discover-web--page-ping-mriduna-----',
-            });
-        }
-
-        // simulates document summary function on Edge's Bing sidebar
-        // unknown character limit, at least up to 7k
-        // if (!jailbreakConversationId && context) {
-        //     obj.arguments[0].previousMessages.push({
-        //         author: 'user',
-        //         description: context,
-        //         contextType: 'WebPage',
-        //         messageType: 'Context',
-        //         messageId: 'discover-web--page-ping-mriduna-----',
-        //     });
-        // }
-
-        if (obj.arguments[0].previousMessages?.length === 0) {
-            delete obj.arguments[0].previousMessages;
-        }
-
-        if (this.debug) {
-            console.debug(JSON.stringify(obj, null, 2));
-        }
 
         const messagePromise = new Promise((resolve, reject) => {
             let replySoFar = '';
             const internalSearchResults = [];
-            let stopTokenFound = false;
+            const internalSearchQueries = [];
 
             const messageTimeout = setTimeout(() => {
                 this.constructor.cleanupWebSocketConnection(ws);
@@ -579,21 +479,15 @@ export default class BingAIClient extends ChatClient {
                     return;
                 }
                 const event = events[0];
-                // console.debug(events);
                 switch (event.type) {
                     case 1: {
-                        if (stopTokenFound) {
-                            return;
-                        }
                         const messages = event?.arguments?.[0]?.messages;
                         if (!messages?.length || messages[0].author !== 'bot') {
-                            // console.log('No messages or unexpected author');
-                            // console.log(messages);
                             return;
                         }
                         if (messages[0].contentOrigin === 'Apology') {
-                            // console.debug('Apology event');
-                            console.log(messages[0]);
+                            console.debug('Apology event');
+                            // console.debug(messages[0]);
                             // resolve({
                             //     message: messages[0],
                             //     conversationExpiryTime: event?.arguments?.[0]?.conversationExpiryTime,
@@ -605,22 +499,22 @@ export default class BingAIClient extends ChatClient {
                         if (messages[0]?.contentType === 'IMAGE') {
                             // You will never get a message of this type without 'gencontentv3' being on.
                             console.debug('Image creation event');
-                            console.log(messages[0]);
+                            console.debug(messages[0]);
 
-                            bicIframe = this.bic
-                                .genImageIframeSsr(
-                                    messages[0].text,
-                                    messages[0].messageId,
-                                    progress => (progress?.contentIframe
-                                        ? onProgress(progress?.contentIframe, messages[0])
-                                        : null),
-                                )
-                                .catch((error) => {
-                                    console.error(error);
-                                    onProgress(error.message);
-                                    bicIframe.isError = true;
-                                    return error.message;
-                                });
+                            // bicIframe = this.bic
+                            //     .genImageIframeSsr(
+                            //         messages[0].text,
+                            //         messages[0].messageId,
+                            //         progress => (progress?.contentIframe
+                            //             ? onProgress(progress?.contentIframe, messages[0]) //console.debug(progress?.contentIframe, messages[0])
+                            //             : null),
+                            //     )
+                            //     .catch((error) => {
+                            //         console.error(error);
+                            //         onProgress(error.message);
+                            //         bicIframe.isError = true;
+                            //         return error.message;
+                            //     });
                             return;
                         }
 
@@ -632,37 +526,33 @@ export default class BingAIClient extends ChatClient {
                         switch (messages[0].messageType) {
                             case 'InternalSearchResult':
                                 internalSearchResults.push(messages[0]);
-                                // difference = '';
                                 break;
                             case 'InternalLoaderMessage':
+                                break;
                             case 'InternalSearchQuery':
-                                difference = `${messages[0].text  }\n`;
+                                internalSearchQueries.push(messages[0]);
+                                difference = `${messages[0].text}\n`;
                                 break;
                             case 'RenderCardRequest':
                                 return;
                             default:
-                                if (!messages[0].text || messages[0].text === replySoFar) {
-                                    return;
-                                }
-                                // get the difference between the current text and the previous text
+                                if (!messages[0].text || messages[0].text === replySoFar) return;
                                 // check for same prefix
-                                if (messages[0].text.startsWith(replySoFar)) {
+                                if (messages[0].text.startsWith(replySoFar) && messages[0].offense === 'Unknown') {
+                                    if (messages[0].text.length < replySoFar.length) {
+                                        console.debug('Text is shorter than replySoFar');
+                                    }
+                                    // get the difference between the current text and the previous text
                                     difference = messages[0].text.substring(replySoFar.length);
                                 } else {
-                                    difference = `\n${messages[0].text}`;
+                                    // difference = `\n${messages[0].text}`;
                                 }
                                 updatedText = messages[0].text; // should overwrite search traces
                         }
-
-                        onProgress(difference, messages[0]);
-                        if (updatedText.trim().endsWith(stopToken)) {
-                            stopTokenFound = true;
-                            // remove stop token from updated text
-                            replySoFar = updatedText
-                                .replace(stopToken, '')
-                                .trim();
-                            return;
-                        }
+                        onProgress({
+                            diff: difference,
+                            details: messages[0],
+                        });
                         replySoFar = updatedText;
                         return;
                     }
@@ -692,8 +582,15 @@ export default class BingAIClient extends ChatClient {
                             }
                             if (replySoFar && eventMessage) {
                                 eventMessage.adaptiveCards[0].body[0].text = replySoFar;
-                                eventMessage.text = replySoFar;
+                                // eventMessage.text = replySoFar;
+                                onProgress({
+                                    details: {
+                                        message: eventMessage,
+                                    },
+                                    finishReason: 'case 2 / error',
+                                });
                                 resolve({
+                                    replySoFar,
                                     message: eventMessage,
                                     conversationExpiryTime:
                                         event?.item?.conversationExpiryTime,
@@ -717,31 +614,22 @@ export default class BingAIClient extends ChatClient {
                             return;
                         }
                         // The moderation filter triggered, so just return the text we have so far
-                        if (
-                            // jailbreakConversationId
-                            // &&
-                            (stopTokenFound
-                                || event.item.messages[0].topicChangerText
-                                || event.item.messages[0].offense === 'OffenseTrigger'
-                                || (event.item.messages.length > 1
-                                    && event.item.messages[1].contentOrigin === 'Apology'))
-                        ) {
-                            if (!replySoFar) {
-                                replySoFar = censoredMessageInjection;
-                            } else {
-                                replySoFar += censoredMessageInjection;
-                            }
-                            // console.log(eventMessage);
-                            // console.log(event.item.messages);
-                            if (eventMessage?.adaptiveCards) {
-                                eventMessage.adaptiveCards[0].body[0].text = replySoFar;
-                            }
-                            eventMessage.text = replySoFar;
+                        if (event.item.messages[0].topicChangerText
+                            || event.item.messages[0].offense === 'OffenseTrigger'
+                            || (event.item.messages.length > 1 && event.item.messages[1].contentOrigin === 'Apology')) {
+                            onProgress({
+                                diff: '⚠',
+                                details: eventMessage,
+                            });
+                            // if (eventMessage?.adaptiveCards) {
+                            //     eventMessage.adaptiveCards[0].body[0].text = replySoFar;
+                            // }
+                            // eventMessage.text = replySoFar;
                             // delete useless suggestions from moderation filter
                             // delete eventMessage.suggestedResponses;
                         }
                         if (bicIframe) {
-                            console.log('bicIframe');
+                            console.debug('bicIframe');
                             // the last messages will be a image creation event if bicIframe is present.
                             let i = messages.length - 1;
                             while (
@@ -754,13 +642,22 @@ export default class BingAIClient extends ChatClient {
                             // since we added a catch, we do not need to wrap this with a try catch block.
                             const imgIframe = await bicIframe;
                             if (!imgIframe?.isError) {
-                                eventMessage.adaptiveCards[0].body[0].text += imgIframe;
+                                console.debug('bicIframe completed');
+                                // eventMessage.adaptiveCards[0].body[0].text += imgIframe;
                             } else {
-                                eventMessage.text += `<br>${imgIframe}`;
-                                eventMessage.adaptiveCards[0].body[0].text = eventMessage.text;
+                                console.debug('bicIframe error');
+                                // eventMessage.text += `<br>${imgIframe}`;
+                                // eventMessage.adaptiveCards[0].body[0].text = eventMessage.text;
                             }
                         }
+                        onProgress({
+                            details: {
+                                message: eventMessage,
+                            },
+                            finishReason: 'case 2 / success',
+                        });
                         resolve({
+                            replySoFar,
                             message: eventMessage,
                             conversationExpiryTime:
                                 event?.item?.conversationExpiryTime,
@@ -800,55 +697,38 @@ export default class BingAIClient extends ChatClient {
         }
         ws.send(`${messageJson}`);
 
-        const { message: reply, conversationExpiryTime, searchResults } = await messagePromise;
-
-        const replyMessage = this.createConversationMessage(
-            {
-                author: this.participants.bot.author,
-                text: reply.text,
-                details: reply,
-                searchResults,
-            },
-            userConversationMessage
-                ? userConversationMessage.id
-                : parentMessageId,
-        );
-        if (jailbreakConversationId) {
-            conversation.messages.push(replyMessage);
-            await this.conversationsCache.set(conversationKey, conversation);
-        }
+        const {
+            replySoFar: text,
+            message,
+            conversationExpiryTime,
+            searchResults,
+        } = await messagePromise;
 
         const returnData = {
-            conversationId,
+            text,
+            message,
+            msftConversationId: conversationId,
             encryptedConversationSignature,
             clientId,
-            invocationId: invocationId + 1,
             conversationExpiryTime,
-            response: reply.text,
-            details: reply,
             searchResults,
+            opts,
         };
-
-        if (jailbreakConversationId) {
-            returnData.jailbreakConversationId = jailbreakConversationId;
-        }
-
-        returnData.parentMessageId = replyMessage.parentMessageId;
-        returnData.messageId = replyMessage.id;
-        returnData.contextInjectionString = contextInjectionString;
-        returnData.chatInjectionString = userMessageInjection;
 
         return returnData;
     }
 
-    static getUserSuggestions(response) {
-        return response?.details?.suggestedResponses?.map(
+    static getUserSuggestions(message) {
+        return message?.suggestedResponses?.map(
             suggestion => suggestion.text,
         );
     }
 
-    static getSearchResults(response) {
-        const searchResults = response?.details?.sourceAttributions;
+    static getSearchResults(message) {
+        const searchResults = message?.sourceAttributions;
+        if (!searchResults) {
+            return null;
+        }
         // create a dictionary indexed by searchQuery and containing the search results associated with that query
         const searchResultsDictionary = {};
         searchResults?.forEach((searchResult) => {

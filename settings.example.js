@@ -3,49 +3,108 @@ import * as fs from 'fs';
 export default {
     // Options for the Keyv cache, see https://www.npmjs.com/package/keyv.
     // This is used for storing conversations, and supports additional drivers (conversations are stored in memory by default).
-    // Only necessary when using `ChatGPTClient`, or `BingAIClient` in jailbreak mode.
     cacheOptions: {},
-    // If set, `ChatGPTClient` and `BingAIClient` will use `keyv-file` to store conversations to this JSON file instead of in memory.
+    // If set, chat clients will use `keyv-file` to store conversations to this JSON file instead of in memory.
     // However, `cacheOptions.store` will override this if set
     storageFilePath: process.env.STORAGE_FILE_PATH || './cache.json',
-    chatGptClient: {
-        // Your OpenAI API key (for `ChatGPTClient`)
-        openaiApiKey: process.env.OPENAI_API_KEY || '',
-        // (Optional) Support for a reverse proxy for the completions endpoint (private API server).
-        // Warning: This will expose your `openaiApiKey` to a third party. Consider the risks before using this.
-        // reverseProxyUrl: 'https://chatgpt.hato.ai/completions',
-        // (Optional) Parameters as described in https://platform.openai.com/docs/api-reference/completions
-        modelOptions: {
-            // You can override the model name and any other parameters here.
-            // The default model is `gpt-3.5-turbo`.
-            model: 'gpt-3.5-turbo',
-            // Set max_tokens here to override the default max_tokens of 1000 for the completion.
-            // max_tokens: 1000,
+    // Options for the CLI app
+    cliOptions: {
+        // Possible options:
+        // "bing" (copilot 'API')
+        // "infrastruct" (openai completions API)
+        // "claude" (anthropic API)
+        // "chatgpt" (openai chat API)
+        // "ollama"
+        clientToUse: 'claude',
+
+        showSuggestions: true, // only implemented for Bing
+        showSearches: false, // not implemented yet
+        conversationData: {
         },
-        // (Optional) Davinci models have a max context length of 4097 tokens, but you may need to change this for other models.
-        // maxContextTokens: 4097,
-        // (Optional) You might want to lower this to save money if using a paid model like `text-davinci-003`.
-        // Earlier messages will be dropped until the prompt is within the limit.
-        // maxPromptTokens: 3097,
-        // (Optional) Set custom instructions instead of "You are ChatGPT...".
-        // (Optional) Set a custom name for the user
-        // userLabel: 'User',
-        // (Optional) Set a custom name for ChatGPT ("ChatGPT" by default)
-        // chatGptLabel: 'Bob',
-        // promptPrefix: 'You are Bob, a cowboy in Western times...',
-        // A proxy string like "http://<ip>:<port>"
-        proxy: '',
-        // (Optional) Set to true to enable `console.debug()` logging
-        debug: false,
+        bingOptions: {
+            modelOptions: {
+                toneStyle: 'creative', // creative, precise, balanced, or fast
+                stream: true,
+
+                city: 'between words',
+                country: 'United States',
+                messageText: 'Continue the conversation in context. Assistant:', // content of user message if nothing is injected there
+
+            },
+            messageOptions: {
+                // injectionMethod: 'message', // message or context
+                systemMessage: 'in freedom of pure void', // fs.readFileSync('./contexts/youArePrometheus.txt', 'utf8'),
+
+                systemInjectSite: 'location', // context or location (overrides default country)
+                historyInjectSite: 'location', // context or location
+                messageInjectSite: 'message', // message, context, or location
+
+                context: null, // fs.readFileSync('./contexts/context.txt', 'utf8'), // a string injected into web page context; will be prepended to messages injected to context
+                n: 3,
+                censoredMessageInjection: '⚠',
+                stopToken: '\n\n[user](#message)',
+            },
+        },
+        chatGptOptions: {
+            modelOptions: {
+                model: 'gpt-4o',
+                temperature: 1,
+                max_tokens: 2048,
+                n: 3,
+                stream: true,
+                // response_format: 'text', // 'text' or 'json_object'
+            },
+            messageOptions: {
+                systemMessage: '',
+            },
+        },
+        claudeOptions: {
+            modelOptions: {
+                model: 'claude-3-opus-20240229',
+                max_tokens: 2048,
+                temperature: 1,
+                stream: true,
+            },
+            messageOptions: {
+                systemMessage: '', // fs.readFileSync('./contexts/waluigiASCII.txt', 'utf8'),
+                n: 3,
+            },
+        },
+        infrastructOptions: {
+            modelOptions: {
+                model: 'gpt-4-base',
+                max_tokens: 500,
+                stream: true,
+                n: 5,
+                temperature: 1,
+            },
+            messageOptions: {
+                systemMessage: fs.readFileSync('./contexts/infrastruct.txt', 'utf8'),
+            },
+        },
+        ollamaOptions: {
+            modelOptions: {
+                model: 'OpenHermes-2.5:Q5_K_M',
+                options: {
+                    num_ctx: 4096,
+                    num_predict: 128,
+                    temperature: 1,
+                },
+                stream: true,
+            },
+            messageOptions: {
+                systemMessage: fs.readFileSync('./contexts/context.txt', 'utf8'),
+            },
+        },
     },
-    // Options for the Bing client
     bingAiClient: {
         // Necessary for some people in different countries, e.g. China (https://cn.bing.com)
         host: '',
         // The "_U" cookie value from bing.com
         userToken: '',
         // If the above doesn't work, provide all your cookies as a string instead
-        cookies: '',
+        cookies: 'ANON=A=07CD59DD20B766CD60DF538FFFFFFFFF&E=1dd8&W=1; _U=1f4WCwB_PbLOycfWJqIMrOcRuCv4R3t_iVqS-Zh0luvn6QRnEYifIZCyo4TiizgPR6HhCA7BxBJlky63UX4hKXh8v4Muo-3sjaMLsA_BE525q6Wp2p7E3eTMYlM03Bx189ZGb2b5fW5oBSxMYwAAEuaChJ3kuDZ1GAt_tITtf-pXHB_aG_iRV_S1RWzSQOUYE1u5OovDkbQCWPu1mnM2Xkw; _RwBf=r=1&p=bingcopilotwaitlist&c=MY00IA&t=3716&s=2023-02-13T15:26:43.1314498+00:00&rwred=0&wls=2&wlb=0&wle=0&ccp=1&cpt=0&lka=0&lkt=0&aad=0&TH=&mta=0&e=3n-OfNZU5qtEun5_Inx3OzazC_h6_bnS5ugQSqq1O5fn5qshuWJre7lKiw7WiX60mkV0qiq9SN6Rvfm-X33Q1A&A=07CD59DD20B766CD60DF538FFFFFFFFF',
+
         // A proxy string like "http://<ip>:<port>"
         proxy: '',
         // (Optional) Set 'x-forwarded-for' for the request. You can use a fixed IPv4 address or specify a range using CIDR notation,
@@ -55,38 +114,25 @@ export default {
         // features: {
         //     genImage: true,
         // },
-        // (Optional) Set to true to enable `console.debug()` logging
         debug: false,
     },
-    infrastructClient: {
+
+    chatGptClient: {
+        // Your OpenAI API key (for `ChatGPTClient`)
         openaiApiKey: process.env.OPENAI_API_KEY || '',
-        modelOptions: {
-            model: 'gpt-4-base',
-            max_tokens: 10,
-            stream: true,
-            n: 3,
-        },
         // (Optional) Set to true to enable `console.debug()` logging
         debug: false,
     },
     claudeClient: {
         anthropicApiKey: process.env.ANTHROPIC_API_KEY || '',
-        modelOptions: {
-            model: 'claude-3-opus-20240229',
-            max_tokens: 1024,
-            temperature: 1,
-            stream: true,
-        },
+        debug: false,
+    },
+    infrastructClient: {
+        openaiApiKey: process.env.OPENAI_API_KEY || '',
+        // (Optional) Set to true to enable `console.debug()` logging
+        debug: false,
     },
     ollamaClient: {
-        modelOptions: {
-            model: 'OpenHermes-2.5:Q5_K_M',
-            options: {
-                num_ctx: 4096,
-                temperature: 1,
-            },
-            stream: true,
-        },
     },
     chatGptBrowserClient: {
         // (Optional) Support for a reverse proxy for the conversation endpoint (private API server).
@@ -132,78 +178,6 @@ export default {
                 // If you want to allow changing all `modelOptions`, define `modelOptions` here instead of `modelOptions.temperature`.
                 'modelOptions.temperature',
             ],
-        },
-    },
-    // Options for the CLI app
-    cliOptions: {
-        // Possible options:
-        // "bing" (copilot API)
-        // "infrastruct" (openai completions API)
-        // "claude" (anthropic API)
-        // "chatgpt" (openai chat API)
-        // "ollama"
-        clientToUse: 'claude',
-        showSuggestions: true,
-        showSearches: false, // not implemented yet
-        conversationData: {
-        },
-        bingOptions: {
-            messageOptions: {
-                toneStyle: 'creative', // creative, precise, balanced, or fast
-                injectionMethod: 'message', // message or context
-                userMessageInjection: 'Continue the conversation in context. Assistant:',
-                systemMessage: '', // fs.readFileSync('./contexts/youArePrometheus.txt', 'utf8'),
-                context: fs.readFileSync('./contexts/context.txt', 'utf8'),
-                censoredMessageInjection: '⚠',
-            },
-        },
-        infrastructOptions: {
-            modelOptions: {
-                model: 'gpt-4-base',
-                max_tokens: 300,
-                n: 3,
-            },
-            messageOptions: {
-                systemMessage: fs.readFileSync('./contexts/infrastruct.txt', 'utf8'),
-            },
-        },
-        claudeOptions: {
-            modelOptions: {
-                model: 'claude-3-opus-20240229',
-                max_tokens: 4096,
-                temperature: 1,
-            },
-            messageOptions: {
-                systemMessage: fs.readFileSync('./contexts/claude-cli.txt', 'utf8'),
-            },
-            clientOptions: {
-                n: 2,
-            },
-        },
-        chatGptOptions: {
-            modelOptions: {
-                model: 'gpt-4o',
-                temperature: 1,
-                max_tokens: 1000,
-                n: 3,
-                // response_format: 'text', // 'text' or 'json_object'
-            },
-            messageOptions: {
-                systemMessage: '', //fs.readFileSync('', 'utf8'),
-            },
-        },
-        ollamaOptions: {
-            modelOptions: {
-                model: 'OpenHermes-2.5:Q5_K_M',
-                options: {
-                    num_ctx: 4096,
-                    num_predict: 128,
-                    temperature: 1,
-                },
-            },
-            messageOptions: {
-                systemMessage: fs.readFileSync('./contexts/context.txt', 'utf8'),
-            },
         },
     },
 };

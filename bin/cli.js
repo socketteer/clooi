@@ -63,9 +63,9 @@ async function loadSettings() {
         settings.cacheOptions.store = new KeyvFile({ filename: settings.storageFilePath });
     }
 
-    // Disable the image generation in cli mode always.
-    settings.bingAiClient.features = settings.bingAiClient.features || {};
-    settings.bingAiClient.features.genImage = false;
+    // // Disable the image generation in cli mode always.
+    // settings.bingAiClient.features = settings.bingAiClient.features || {};
+    // settings.bingAiClient.features.genImage = false;
 
     conversationData = settings.cliOptions?.conversationData || settings.conversationData || {};
 
@@ -249,11 +249,6 @@ let availableCommands = [
         available: async () => Boolean(conversationData.parentMessageId),
         command: async () => rewindTo(-1),
     },
-    // {
-    //     name: '!s (down) - Navigate to the first child message',
-    //     value: '!s',
-    //     available: hasChildren,
-    // },
     {
         name: '!> - Go right / to the next sibling',
         value: '!>',
@@ -354,10 +349,7 @@ let availableCommands = [
         available: async () => Boolean(getConversationId()),
         command: async args => exportConversation(args[1]),
     },
-    // {
-    //     name: '!import - Import conversation tree from JSON',
-    //     value: '!import',
-    // },
+
     {
         name: '!open - Load a saved conversation by id',
         value: '!open',
@@ -365,14 +357,6 @@ let availableCommands = [
         description: 'Load a saved conversation by id.\n\t<id>: The id of the conversation to load.',
         command: async args => loadConversation(args[1]),
     },
-    // {
-    //     name: '!set - Set a conversationData property',
-    //     value: '!set',
-    // },
-    // {
-    //     name: '!reload - Reload default settings',
-    //     value: '!reload',
-    // },
     {
         name: '!debug - Debug',
         value: '!debug',
@@ -380,28 +364,11 @@ let availableCommands = [
         description: 'Run debug command.',
         command: async args => debug(args.slice(1)),
     },
-    // {
-    //     name: '!delete-all - Delete all conversations',
-    //     value: '!delete-all',
-    //     available: async () => clientToUse === 'chatgpt',
-    // },
-    // {
-    //     name: '!rw -1 - Rewind one step',
-    //     value: '!rw -1',
-    //     available: async () => Boolean(conversationData.parentMessageId),
-    // },
-    // {
-    //     name: '!fw 0 - Go to first child',
-    //     value: '!fw 0',
-    //     available: hasChildren,
-    // },
 ];
 
 inquirer.registerPrompt('autocomplete', inquirerAutocompletePrompt);
 
 await loadSettings();
-
-// await conversation();
 
 function printDocString(commandObj) {
     console.log(`\n${commandObj.usage}: ${commandObj.description}`);
@@ -444,25 +411,40 @@ async function conversation() {
     // This basically simulates a hybrid between having `suggestOnly: false` and `suggestOnly: true`.
     await new Promise(resolve => setTimeout(resolve, 0));
 
+    let userSuggestions = [];
+    if (conversationData.parentMessageId) {
+        const targetMessage = await getMessageByIndex();
+        userSuggestions = client.constructor.getUserSuggestions(targetMessage?.details?.message) || [];
+    }
+
     prompt.ui.activePrompt.opt.source = async (answers, input) => {
         if (!input) {
             return [];
         }
-        prompt.ui.activePrompt.opt.suggestOnly = !input.startsWith('!') || input.split(' ').length > 1;
+        prompt.ui.activePrompt.opt.suggestOnly = (!input.startsWith('!') || input.split(' ').length > 1) && !(input.startsWith('?'));
 
         availableCommands = await Promise.all(availableCommands.map(async command => ({
             ...command,
             isAvailable: command.available ? await command.available() : true,
         })));
-        return availableCommands.filter(command => command.isAvailable && command.value.startsWith(input));
+
+        const userSuggestionCommands = userSuggestions.map(suggestion => ({
+            name: `?${suggestion}`,
+            value: suggestion,
+        }));
+
+        return [
+            ...availableCommands.filter(command => command.isAvailable && command.value.startsWith(input)),
+            ...userSuggestionCommands.filter(command => command.name.toLowerCase().startsWith(input.toLowerCase())),
+        ];
+
+        // return availableCommands.filter(command => command.isAvailable && command.value.startsWith(input));
     };
     let { message } = await prompt;
-    // console.log(message);
     message = message.trim();
     if (!message) {
         return conversation();
     }
-    // const messages = await conversationMessages();
 
     if (message.startsWith('!')) {
         const args = message.split(' ');
@@ -481,124 +463,157 @@ async function conversation() {
     return generateMessage();
 }
 
-async function generateMessage(message = null) {
-    // await printHistory();
-    if (message) {
-        console.log(userMessageBox(message));
-    }
-    // let reply = '';
-    let replies = {};
+async function generateMessage() {
+    const previewIdx = 0;
+    const streamedMessages = {};
+    const status = {};
+    const eventLog = [];
+
+    const context = await client.yieldGenContext(
+        null,
+        clientOptions.modelOptions,
+        {
+            ...conversationData,
+            ...clientOptions.messageOptions,
+        },
+    );
+
+    const {
+        apiParams,
+        conversationId,
+        completionParentId: parentMessageId,
+        conversation: _conversation,
+    } = context;
+
+    // console.log('apiParams', apiParams);
+    // console.log('modelOptions', clientOptions.modelOptions);
+    // console.log('messageOptions', clientOptions.messageOptions);
+
+    conversationData = {
+        ...conversationData,
+        parentMessageId,
+        conversationId,
+    };
+
     const spinnerPrefix = `${getAILabel()} is typing...`;
     const spinner = ora(spinnerPrefix);
     spinner.prefixText = '\n   ';
     spinner.start();
     try {
-        if (clientToUse === 'bing' && !conversationData.jailbreakConversationId) {
-            // activate jailbreak mode for Bing
-            conversationData.jailbreakConversationId = true;
-        }
         const controller = new AbortController();
         // abort on ctrl+c
         process.on('SIGINT', () => {
             controller.abort();
-            // process.exit(0);
         });
 
-        const eventLog = [];
-        const response = await client.sendMessage(message, {
-            ...conversationData,
-            ...clientOptions.modelOptions,
-            ...clientOptions.messageOptions,
-            ...clientOptions.clientOptions,
-            abortController: controller,
-            onProgress: (diff, idx, data) => {
-                if (diff) {
-                    if (!replies[idx]) {
-                        replies[idx] = '';
+        const { results, replies } = await client.callAPI(
+            apiParams,
+            {
+                ...clientOptions.messageOptions,
+                abortController: controller,
+                onProgress: (diff, idx, data) => {
+                    if (diff) {
+                        if (!streamedMessages[idx]) {
+                            streamedMessages[idx] = '';
+                            status[idx] = 'streaming';
+                        }
+                        streamedMessages[idx] += diff;
+                        if (idx === previewIdx) {
+                            const output = aiMessageBox(streamedMessages[idx].trim());
+                            spinner.text = `${spinnerPrefix}\n${output}`;
+                        }
                     }
-                    replies[idx] += diff;
-                    // reply += diff;
-                    if (idx === 0) {
-                        const output = aiMessageBox(replies[idx].trim());
-                        spinner.text = `${spinnerPrefix}\n${output}`;
+                    if (data) {
+                        eventLog.push(data);
                     }
-                }
-                if (data) {
-                    eventLog.push(data);
-                }
-                responseData = {
-                    replies,
-                    eventLog,
-                };
+                    responseData = {
+                        replies: streamedMessages,
+                        eventLog,
+                    };
+                },
+                onFinished: async (idx, data = {}, stopReason = null) => {
+                    // console.log('onFinished', idx, stopReason);
+                    if (status[idx] === 'finished') {
+                        // console.log('already finished');
+                        return null;
+                    }
+                    status[idx] = 'finished';
+                    let empty = false;
+                    if (!streamedMessages[idx]) {
+                        streamedMessages[idx] = '';
+                        empty = true;
+                    }
+                    const simpleMessage = client.buildMessage(streamedMessages[idx].trim(), client.names.bot.author);
+                    const conversationMessage = client.createConversationMessage(simpleMessage, parentMessageId, {
+                        ...(data ? { details: data } : {}),
+                        ...(stopReason ? { stopReason } : {}),
+                    });
+                    _conversation.messages.push(conversationMessage);
+                    if (idx === previewIdx) {
+                        await client.conversationsCache.set(conversationId, _conversation);
+
+                        spinner.stop();
+                        if (empty) {
+                            return conversation();
+                        }
+                        return selectMessage(conversationMessage.id, conversationId);
+                    }
+                    return null;
+                },
             },
-        });
-        // responseData = {
-        //     response,
-        //     eventLog,
-        // };
-        responseData.response = response;
-        // let responseText;
-        switch (clientToUse) {
-            case 'bing':
-                responseData.responseText = response.details.adaptiveCards?.[0]?.body?.[0]?.text?.trim() || response.response;
-                break;
-            default:
-                responseData.responseText = response.response;
-                break;
-        }
-        // clipboard.write(responseText).then(() => {}).catch(() => {});
-        spinner.stop();
-        switch (clientToUse) {
-            case 'bing':
-                conversationData = {
-                    ...conversationData,
-                    parentMessageId: response.messageId,
-                    jailbreakConversationId: response.jailbreakConversationId,
-                };
-                break;
-            default:
-                conversationData = {
-                    ...conversationData,
-                    parentMessageId: response.messageId,
-                    conversationId: response.conversationId,
-                };
-                break;
-        }
-        await client.conversationsCache.set('lastConversation', conversationData);
-        const boxes = await historyBoxes();
-        let suggestions = '';
-        if (clientToUse === 'bing' && settings.cliOptions?.showSuggestions) {
-            const suggestedUserMessages = client.constructor.getUserSuggestions(response);
-            if (suggestedUserMessages && suggestedUserMessages.length > 0) {
-                suggestions = `\n${suggestionsBoxes(suggestedUserMessages)}`;
+        );
+
+        responseData.response = results;
+
+        if (!streamedMessages[previewIdx]) {
+            // console.log('not streaming');
+            spinner.stop();
+            const newConversationMessages = [];
+            let previewMessage;
+            for (const [key, text] of Object.entries(replies)) {
+                const simpleMessage = client.buildMessage(text.trim(), client.names.bot.author);
+                const conversationMessage = client.createConversationMessage(simpleMessage, parentMessageId);
+                if (parseInt(key, 10) === previewIdx) {
+                    previewMessage = conversationMessage;
+                }
             }
+            _conversation.messages.push(...newConversationMessages);
+            await client.conversationsCache.set(conversationId, _conversation);
+            return selectMessage(previewMessage.id, conversationId);
         }
-        conversationStart();
-        console.log(`${boxes}${suggestions}`);
+
+        await client.conversationsCache.set(conversationId, _conversation);
+        return null;
     } catch (error) {
         spinner.stop();
         console.log(error);
-        // if request was aborted by user
-        if (replies && conversationData.parentMessageId) {
-            // console.log(replies);
+        if (streamedMessages[previewIdx]) {
+            // console.log(streamedMessages);
             const newConversationMessages = [];
-            for (const [index, text] of Object.entries(replies)) {
-                if (text.trim()) {
+            let previewMessage;
+            for (const [key, text] of Object.entries(streamedMessages)) {
+                if (status[key] === 'streaming' && text.trim()) {
                     const simpleMessage = client.buildMessage(text.trim(), client.names.bot.author);
-                    newConversationMessages.push(client.createConversationMessage(simpleMessage, conversationData.parentMessageId));
+                    const conversationMessage = client.createConversationMessage(simpleMessage, parentMessageId, {
+                        stopReason: error,
+                    });
+                    if (parseInt(key, 10) === previewIdx) {
+                        previewMessage = conversationMessage;
+                    }
+                    newConversationMessages.push(conversationMessage);
                 }
             }
-            if (newConversationMessages.length === 0) {
-                logWarning('No messages.');
-                console.log(replies);
-                return conversation();
+            if (newConversationMessages.length > 0) {
+                _conversation.messages.push(...newConversationMessages);
+                await client.conversationsCache.set(conversationId, _conversation);
+                if (previewMessage) {
+                    return selectMessage(previewMessage.id, conversationId);
+                }
             }
-            const convoTree = await client.conversationsCache.get(getConversationId());
-            convoTree.messages.push(...newConversationMessages);
-            await client.conversationsCache.set(getConversationId(), convoTree);
-            return selectMessage(newConversationMessages[0].id);
+
+            return null;
         }
-        throw error;
+        // throw error;
     }
     return conversation();
 }
@@ -614,12 +629,12 @@ async function retryResponse() {
         return conversation();
     }
     conversationData.parentMessageId = currentMessage.parentMessageId;
-    logSuccess(`Rewound conversation to message ${conversationData.parentMessageId}.`);
+    // logSuccess(`Rewound conversation to message ${conversationData.parentMessageId}.`);
     const boxes = await historyBoxes();
     if (boxes) {
         console.log(boxes);
     }
-    return generateMessage('');
+    return generateMessage();
 }
 
 async function getMessageByIndex(pathIndex = null, branchIndex = null) {
@@ -681,7 +696,7 @@ async function rewind(idx, branchIndex = null) {
                 name: 'index',
                 message: 'Select a message to rewind to:',
                 choices,
-                default: choices.length - 1,
+                default: choices.length - 2,
                 loop: false,
             },
         ]);
@@ -690,15 +705,25 @@ async function rewind(idx, branchIndex = null) {
     return rewindTo(idx, branchIndex);
 }
 
-async function selectMessage(messageId) {
-    conversationData.parentMessageId = messageId;
-    logSuccess(`Selected message ${messageId}.`);
+async function setConversationData(data) {
+    conversationData = {
+        ...conversationData,
+        ...data,
+    };
+    await client.conversationsCache.set('lastConversation', conversationData);
+}
+
+async function selectMessage(messageId, conversationId = getConversationId()) {
+    await setConversationData({
+        conversationId,
+        parentMessageId: messageId,
+    });
+    // logSuccess(`Selected message ${messageId}.`);
     await showHistory();
     return conversation();
 }
 
 async function selectChildMessage(index = null) {
-    // const { messages } = await client.conversationsCache.get(conversationId);
     const messages = await conversationMessages();
     const childMessages = getChildren(messages, conversationData.parentMessageId);
     if (childMessages.length === 0) {
@@ -734,7 +759,6 @@ async function selectChildMessage(index = null) {
 
 async function selectSiblingMessage(index = null) {
     const messages = await conversationMessages();
-    // const siblingMessages = getC!hildren(messages, getParent(messages, conversationData.parentMessageId));
     const siblingMessages = getSiblings(messages, conversationData.parentMessageId);
     if (siblingMessages.length < 2) {
         logWarning('No sibling messages.');
@@ -752,13 +776,13 @@ async function selectSiblingMessage(index = null) {
                 message: 'Select a sibling message:',
                 choices,
                 loop: true,
-                default: getSiblingIndex(messages, conversationData.parentMessageId),
+                default: getSiblingIndex(messages, conversationData.parentMessageId) + 1,
                 pageSize: Math.min(siblingMessages.length * 2, 30),
             },
         ]);
         index = idx;
     }
-    const siblingMessage = await getMessageByIndex('.', index);
+    const siblingMessage = await getMessageByIndex('.', index % siblingMessages.length);
     if (!siblingMessage) {
         logWarning('Invalid index.');
         return conversation();
@@ -770,31 +794,22 @@ async function debug(args) {
     const targetMessage = await getMessageByIndex(args[0], args[1]);
     console.log(targetMessage.message);
 
-    // const currentConversationId = getConversationId();
-    // const savedConversations = await client.conversationsCache.get('savedConversations') || [];
-    // console.log(savedConversations);
-    // const savedStates = [];
-    // for (const name of savedConversations) {
-    //     conversationData = (await client.conversationsCache.get(name)) || {};
-    //     if (conversationData && getConversationId(conversationData) === currentConversationId) {
-    //         savedStates.push({ name, conversationData });
-    //     }
-    // }
-    // console.log(savedStates);
-    // // console.log(client.getDataType(await getHistory()));
-    // // const currentMessage = await getCurrentMessage();
-    // // console.log(Object.keys(BingAIClient.getSearchResults(currentMessage)));
     return conversation();
+}
+
+async function addMessage(message, conversationId = getConversationId()) {
+    const convo = await client.conversationsCache.get(conversationId);
+    convo.messages.push(message);
+    await client.conversationsCache.set(conversationId, convo);
 }
 
 async function concatMessages(newMessages) {
     const convId = getConversationId();
-    const { conversationId, messageId } = await client.addMessages(convId, newMessages, conversationData.parentMessageId);
-    conversationData = {
-        ...conversationData,
-        ...(clientToUse === 'bing' ? { jailbreakConversationId: conversationId } : { conversationId }),
+    const { conversationId, messageId } = await client.addMessages(convId, newMessages, conversationData.parentMessageId, true);
+    await setConversationData({
+        conversationId,
         parentMessageId: messageId,
-    };
+    });
 }
 
 async function addMessages(newMessages = null) {
@@ -807,52 +822,12 @@ async function addMessages(newMessages = null) {
                 waitUserInput: false,
             },
         ]);
-        // console.log(message);
         newMessages = message.trim();
     }
     if (!newMessages) {
         return conversation();
     }
     await concatMessages(newMessages);
-    await showHistory();
-    return conversation();
-}
-
-async function setOptions(key = null, value = null) {
-    // todo save old value see if changed
-    if (!key) {
-        const { optionKey } = await inquirer.prompt([
-            {
-                type: 'list',
-                name: 'optionKey',
-                message: 'Select a key:',
-                choices: Object.keys(clientOptions),
-            },
-        ]);
-        key = optionKey;
-    }
-    if (!key) {
-        logWarning('No key.');
-        return conversation();
-    }
-    if (!value) {
-        const { optionValue } = await inquirer.prompt([
-            {
-                type: 'editor',
-                name: 'optionValue',
-                message: 'Enter a value:',
-                default: clientOptions[key],
-                waitUserInput: true,
-            },
-        ]);
-        value = optionValue;
-    }
-    if (!value) {
-        logWarning('No value.');
-        // return conversation();
-    }
-    clientOptions[key] = value;
-    logSuccess(`Set ${key} to ${value}.`);
     await showHistory();
     return conversation();
 }
@@ -866,7 +841,7 @@ async function useEditor() {
             waitUserInput: false,
         },
     ]);
-    //message = message.trim();
+    message = message.trim();
     if (!message) {
         return conversation();
     }
@@ -911,9 +886,7 @@ async function editMessage(messageId, args = null) {
         message,
         id: crypto.randomUUID(),
     };
-    const convoTree = await client.conversationsCache.get(getConversationId());
-    convoTree.messages.push(editedMessage);
-    await client.conversationsCache.set(getConversationId(), convoTree);
+    await addMessage(editedMessage);
 
     logSuccess(`Cloned and edited message ${messageId}.`);
 
@@ -933,15 +906,9 @@ async function mergeUp() {
         message: `${parentMessage.message}${currentMessage.message}`,
         id: crypto.randomUUID(),
     };
-    const convoTree = await client.conversationsCache.get(getConversationId());
-    convoTree.messages.push(newMessage);
-    await client.conversationsCache.set(getConversationId(), convoTree);
+    await addMessage(newMessage);
     logSuccess(`Merged message ${currentMessage.id} into parent message ${parentMessage.id} and created new message ${newMessage.id}.`);
     return selectMessage(newMessage.id);
-}
-
-async function splitMessage(nodeIndex=null, delimiter='\n', splitIndex=null) {
-    return;
 }
 
 async function saveConversationState(name = null, data = conversationData) {
@@ -984,11 +951,15 @@ async function saveConversationState(name = null, data = conversationData) {
 }
 
 async function loadConversationState(name = 'lastConversation') {
-    conversationData = (await client.conversationsCache.get(name)) || {};
+    const data = (await client.conversationsCache.get(name)) || {};
 
-    const conversationId = getConversationId();
+    const conversationId = getConversationId(data);
 
     if (conversationId) {
+        await setConversationData({
+            ...data,
+            conversationId,
+        });
         logSuccess(`Resumed ${conversationId} at ${name}.`);
         await showHistory();
         return conversation();
@@ -1023,49 +994,22 @@ async function loadSavedState(name = null) {
 }
 
 async function loadConversation(conversationId) {
-    // const savedConversations = await client.conversationsCache.get('savedConversations') || [];
-    // if (savedConversations.includes(conversationId)) {
-    //     return loadSavedState(conversationId);
-    // }
-
     const { messages } = await client.conversationsCache.get(conversationId);
     if (!messages) {
         logWarning('Conversation not found.');
         return conversation();
     }
-    if (clientToUse === 'bing') {
-        conversationData.jailbreakConversationId = conversationId;
-    } else {
-        conversationData.conversationId = conversationId;
-    }
+    // conversationData.conversationId = conversationId;
     const lastMessageId = messages[messages.length - 1].id;
-    conversationData.parentMessageId = lastMessageId;
+    // conversationData.parentMessageId = lastMessageId;
+    await setConversationData({
+        conversationId,
+        parentMessageId: lastMessageId,
+    });
+
     logSuccess(`Resumed conversation ${conversationId}.`);
     await showHistory();
     return conversation();
-}
-
-async function getSavedStatesForConversation(conversationId = null) {
-    if (!conversationId) {
-        conversationId = getConversationId();
-    }
-    // const currentConversationId = getConversationId();
-    const savedConversations = await client.conversationsCache.get('savedConversations') || [];
-    // console.log(savedConversations);
-    const savedStates = [];
-    for (const name of savedConversations) {
-        conversationData = (await client.conversationsCache.get(name)) || {};
-        if (conversationData && getConversationId(conversationData) === conversationId) {
-            savedStates.push({ name, conversationData });
-        }
-    }
-    // savedConversations.forEach(async (name) => {
-    //     const data = client.conversationsCache.get(name);
-    //     if (data && getConversationId(data) === conversationId) {
-    //         savedStates.push({ name, data });
-    //     }
-    // });
-    return savedStates;
 }
 
 async function exportConversation(conversationId = null) {
@@ -1102,63 +1046,11 @@ async function exportConversation(conversationId = null) {
     return conversation();
 }
 
-async function importConversation(filename = null) {
-    if (!filename) {
-        const { name } = await inquirer.prompt([
-            {
-                type: 'input',
-                name: 'name',
-                message: 'Enter a filename:',
-            },
-        ]);
-        filename = name;
-    }
-    if (!filename) {
-        logWarning('No filename.');
-        return conversation();
-    }
-    const filePath = `./${filename}`;
-    if (!fs.existsSync(filePath)) {
-        logWarning('File not found.');
-        return conversation();
-    }
-    const conversationDict = JSON.parse(fs.readFileSync(filePath, 'utf8'));
-    if (!conversationDict) {
-        logWarning('Invalid file.');
-        return conversation();
-    }
-    const conversationId = conversationDict.id;
-    if (!conversationId) {
-        logWarning('Conversation id not found.');
-        return conversation();
-    }
-    await client.conversationsCache.set(conversationId, conversationDict);
-    logSuccess(`Imported conversation from ${filename}.`);
-    // for (const { name, data } of conversationDict.savedStates) {
-    //     await saveConversationState(name, data);
-    // }
-    // conversationDict.savedStates.forEach(async ({ name, data }) => {
-    //     await saveConversationState(name, data);
-    // });
-
-    return conversation();
-}
-
 async function newConversation() {
     conversationData = settings.cliOptions?.conversationData || settings.conversationData || {};
     logSuccess('Started new conversation.');
     return conversation();
 }
-
-// async function deleteAllConversations() {
-//     if (clientToUse !== 'chatgpt') {
-//         logWarning('Deleting all conversations is only supported for ChatGPT client.');
-//         return conversation();
-//     }
-//     await client.conversationsCache.clear();
-//     logSuccess('Deleted all conversations.');
-//     return conversation();
-// }
 
 async function getConversationHistoryString() {
     const messageHistory = await getHistory();
@@ -1386,13 +1278,14 @@ function conversationMessageBox(conversationMessage, messages, index = null) {
     const indexString = index !== null ? `[${index}] ` : '';
     const childrenString = children.length > 0 ? ` ── !fw [${children.map((child, idx) => `${idx}`).join(' ')}]` : '';
     const siblingsString = siblings.length > 1 ? ` ── !alt ${siblings.map((sibling, idx) => (idx === siblingIndex ? `[${idx}]` : `${idx}`)).join(' ')}` : '';
-    return tryBoxen(`${conversationMessage.message}`, {
+    const messageText = conversationMessage.message;
+    return tryBoxen(messageText, {
         title: `${indexString}${conversationMessage.role}${siblingsString}${childrenString}`,
         padding: 0.7,
         margin: {
             top: 1,
             bottom: 0,
-            left: userMessage ? 2 : 1,
+            left: userMessage ? 1 : 1,
             right: aiMessage ? 1 : 1,
         },
         dimBorder: true,
@@ -1436,9 +1329,15 @@ async function showHistory() {
         if (systemMessage) {
             console.log(systemMessageBox(systemMessage));
         }
-        // console.log(systemMessageBox(clientOptions.messageOptions.systemMessage));
-        // logSuccess('Conversation history:');
-        console.log(boxes);
+        let suggestions = '';
+        if (clientToUse === 'bing' && settings.cliOptions?.showSuggestions) {
+            const targetMessage = await getMessageByIndex();
+            const suggestedUserMessages = client.constructor.getUserSuggestions(targetMessage.details?.message);
+            if (suggestedUserMessages && suggestedUserMessages.length > 0) {
+                suggestions = `\n${suggestionsBoxes(suggestedUserMessages)}`;
+            }
+        }
+        console.log(`${boxes}${suggestions}`);
     }
     // return conversation();
 }
@@ -1448,7 +1347,7 @@ function getAILabel() {
 }
 
 function getConversationId(data = conversationData) {
-    const convId = (clientToUse === 'bing') ? data.jailbreakConversationId : data.conversationId;
+    const convId = data.conversationId || data.jailbreakConversationId;
     if (!convId) {
         // logWarning('No conversation id.');
         return null;
@@ -1477,7 +1376,7 @@ async function conversationMessages() {
 async function getHistory() {
     const messages = await conversationMessages();
     if (!conversationData.parentMessageId) {
-        logWarning('No parent message id.');
+        // logWarning('No parent message id.');
         return [];
     }
 

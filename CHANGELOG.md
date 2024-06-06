@@ -1,5 +1,24 @@
 # Change log
 
+## 2024-6-4
+
+### Impacts UX
+* Example settings updated
+* Bing
+    * Updated cookie
+    * Added support for parallel completions
+    * updated injection technique, MSFT completely defeated
+    * updated names/functionality of some settings
+* Made parallel streaming messages non-blocking 
+* User suggestions display if available for current message, not just the most recently generated message
+* User suggestions added to autocomplete menu
+* Lastconversation autosave state updates whenever navigation occurs
+
+
+### Other
+* Refactored ChatClient interface
+* Refactored BingAIClient interface to be consistent with ChatClient
+
 ## 2024-5-31
 
 ### Impacts UX
