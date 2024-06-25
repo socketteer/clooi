@@ -1269,6 +1269,11 @@ function conversationStart() {
     }));
 }
 
+function replaceWhitespace(str) {
+    // replaces all space characters with ⠀ to prevent trimming
+    return str.replace(/ /g, '⠀');
+}
+
 function conversationMessageBox(conversationMessage, messages, index = null) {
     const children = getChildren(messages, conversationMessage.id);
     const siblings = getSiblings(messages, conversationMessage.id);
@@ -1278,7 +1283,7 @@ function conversationMessageBox(conversationMessage, messages, index = null) {
     const indexString = index !== null ? `[${index}] ` : '';
     const childrenString = children.length > 0 ? ` ── !fw [${children.map((child, idx) => `${idx}`).join(' ')}]` : '';
     const siblingsString = siblings.length > 1 ? ` ── !alt ${siblings.map((sibling, idx) => (idx === siblingIndex ? `[${idx}]` : `${idx}`)).join(' ')}` : '';
-    const messageText = conversationMessage.message;
+    const messageText = replaceWhitespace(conversationMessage.message);
     return tryBoxen(messageText, {
         title: `${indexString}${conversationMessage.role}${siblingsString}${childrenString}`,
         padding: 0.7,
