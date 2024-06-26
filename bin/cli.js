@@ -153,6 +153,10 @@ async function loadSettings() {
             padding: 0.7, margin: 1, borderStyle: 'double', dimBorder: true,
         }));
     }
+    const { systemMessage } = clientOptions.messageOptions;
+    if (systemMessage) {
+        console.log(systemMessageBox(systemMessage));
+    }
     return conversation();
 }
 
@@ -519,7 +523,7 @@ async function generateMessage() {
                         }
                         streamedMessages[idx] += diff;
                         if (idx === previewIdx) {
-                            const output = aiMessageBox(streamedMessages[idx].trim());
+                            const output = aiMessageBox(replaceWhitespace(streamedMessages[idx].trim()));
                             spinner.text = `${spinnerPrefix}\n${output}`;
                         }
                     }
@@ -1271,7 +1275,7 @@ function conversationStart() {
 
 function replaceWhitespace(str) {
     // replaces all space characters with ⠀ to prevent trimming
-    return str.replace(/ /g, '⠀');
+    return str.replace(/\n /g, '\n⠀');
 }
 
 function conversationMessageBox(conversationMessage, messages, index = null) {
