@@ -668,7 +668,9 @@ async function getMessageByIndex(pathIndex = null, branchIndex = null) {
     if (branchIndex < 0) {
         branchIndex = anchorSiblingIndex + branchIndex;
     }
-    if (branchIndex < 0 || branchIndex >= siblingMessages.length) {
+    if (branchIndex < 0) {
+        branchIndex = siblingMessages.length + branchIndex;
+    } else if (branchIndex >= siblingMessages.length) {
         // logWarning('Invalid index.');
         return null;
     }
