@@ -4,16 +4,26 @@ import { pathToFileURL } from 'url';
 import { KeyvFile } from 'keyv-file';
 import { spawn } from 'child_process';
 import boxen from 'boxen';
+import chalk from 'chalk';
+import { writeFile, readFile } from 'fs/promises';
+import { existsSync, realpathSync } from 'fs';
+import { unlink } from 'fs/promises';
+
+
+import chokidar from 'chokidar';
+
 import ora from 'ora';
 import clipboard from 'clipboardy';
 import inquirer from 'inquirer';
 import inquirerAutocompletePrompt from 'inquirer-autocomplete-prompt';
 import crypto from 'crypto';
-import ChatGPTClient from '../src/ChatGPTClient.js';
-import BingAIClient from '../src/BingAIClient.js';
-import InfrastructClient from '../src/InfrastructClient.js';
-import ClaudeClient from '../src/ClaudeClient.js';
-import OllamaClient from '../src/OllamaClient.js';
+// import ChatGPTClient from '../src/ChatGPTClient.js';
+// import BingAIClient from '../src/BingAIClient.js';
+// import InfrastructClient from '../src/InfrastructClient.js';
+// import ClaudeClient from '../src/ClaudeClient.js';
+// import OllamaClient from '../src/OllamaClient.js';
+import { getClient, getClientSettings } from './util.js';
+import { getCid, savedStatesByConversation, getSavedIds } from '../src/cacheUtil.js';
 import {
     getMessagesForConversation,
     getChildren,
@@ -23,25 +33,67 @@ import {
 } from '../src/conversation.js';
 
 const arg = process.argv.find(_arg => _arg.startsWith('--settings'));
-const path = arg?.split('=')[1] ?? './settings.js';
+const pathToSettings = arg?.split('=')[1] ?? './settings.js';
 
 let settings;
+let watcher;
+
 
 let conversationData = {};
 let responseData = {};
 let clientToUse;
 let client;
 let clientOptions;
+<<<<<<< HEAD
 let steeringFeatures = {};
+=======
+let navigationHistory = [];
+let messagesCache = {};
+>>>>>>> f3f539b (cache messages and update settings automatically when settings file changed)
 
-async function loadSettings() {
-    // TODO dynamic import isn't updating the settings file
-    if (fs.existsSync(path)) {
-        // get the full path
-        const fullPath = fs.realpathSync(path);
-        settings = (await import(pathToFileURL(fullPath).toString())).default;
-        // console.log('Loaded settings from', fullPath);
-        // console.log(settings);
+
+async function initializeSettingsWatcher(path) {
+    await updateSettings(path);
+
+    watcher = chokidar.watch(path);
+    watcher.on('change', () => updateSettings(path));
+
+    return watcher;
+}
+
+async function stopSettingsWatcher() {
+    if (watcher) {
+        await watcher.close();
+        // console.log('Settings watcher stopped');
+    }
+}
+
+async function updateSettings(path) {
+
+
+    if (existsSync(path)) {
+        const fullPath = realpathSync(path);
+        const modulePath = pathToFileURL(fullPath).toString();
+        
+        try {
+            // Read the file contents
+            const fileContent = await readFile(fullPath, 'utf8');
+            
+            // Create a temporary file with a unique name
+            const tempPath = `${fullPath}.${Date.now()}.tmp.js`;
+            await writeFile(tempPath, fileContent);
+            
+            // Import the temporary file
+            const module = await import(pathToFileURL(tempPath).toString());
+            settings = module.default;
+            
+            // Delete the temporary file
+            await unlink(tempPath);
+            
+            // console.log('Settings reloaded');
+        } catch (error) {
+            console.error('Error loading settings:', error);
+        }
     } else {
         if (arg) {
             console.error('Error: the file specified by the --settings parameter does not exist.');
@@ -50,6 +102,7 @@ async function loadSettings() {
         }
         process.exit(1);
     }
+
 
     if (settings.storageFilePath && !settings.cacheOptions.store) {
         // make the directory and file if they don't exist
@@ -68,77 +121,25 @@ async function loadSettings() {
     // settings.bingAiClient.features = settings.bingAiClient.features || {};
     // settings.bingAiClient.features.genImage = false;
 
-    conversationData = settings.cliOptions?.conversationData || settings.conversationData || {};
-
-    responseData = {};
+    
     clientToUse = settings.cliOptions?.clientToUse || settings.clientToUse || 'bing';
     // console.log(settings)
 
-    switch (clientToUse) {
-        case 'bing':
-            clientOptions = {
-                ...settings.bingAiClient,
-                ...settings.cliOptions.bingOptions,
-            };
-            client = new BingAIClient({
-                ...clientOptions,
-                cache: settings.cacheOptions,
-            });
-            break;
-        case 'infrastruct':
-            clientOptions = {
-                ...settings.infrastructClient,
-                ...settings.cliOptions.infrastructOptions,
-            };
-            client = new InfrastructClient(
-                settings.openaiApiKey || settings.infrastructClient.openaiApiKey,
-                {
-                    ...clientOptions,
-                    cache: settings.cacheOptions,
-                },
-            );
-            break;
-        case 'claude':
-            clientOptions = {
-                ...settings.claudeClient,
-                ...settings.cliOptions.claudeOptions,
-            };
-            client = new ClaudeClient(
-                settings.anthropicApiKey || settings.claudeClient.anthropicApiKey,
-                {
-                    ...clientOptions,
-                    cache: settings.cacheOptions,
-                },
-            );
-            break;
-        case 'ollama':
-            clientOptions = {
-                ...settings.ollamaClient,
-                ...settings.cliOptions.ollamaOptions,
-            };
-            client = new OllamaClient(
-                {
-                    ...clientOptions,
-                    cache: settings.cacheOptions,
-                },
-            );
-            break;
-        case 'chatgpt':
-            clientOptions = {
-                ...settings.chatGptClient,
-                ...settings.cliOptions.chatGptOptions,
-            };
-            client = new ChatGPTClient(
-                settings.openaiApiKey || settings.chatGptClient.openaiApiKey,
-                {
-                    ...clientOptions,
-                    cache: settings.cacheOptions,
-                },
-            );
-            break;
-        default:
-            throw new Error('Invalid clientToUse setting.');
-    }
+    clientOptions = getClientSettings(clientToUse, settings);
+    client = getClient(clientToUse, settings);
+
+}
+
+
+
+async function loadSettings() {
+    
+    await initializeSettingsWatcher(pathToSettings);
+
+    conversationData = settings.cliOptions?.conversationData || settings.conversationData || {};
+
+    responseData = {};
+    
     if (clientToUse === 'bing') {
         console.log(tryBoxen('Welcome to the Bingleton Backrooms CLooI', {
             title: '😊', padding: 0.7, margin: 1, titleAlignment: 'center', borderStyle: 'arrow', borderColor: 'gray',
@@ -165,16 +166,14 @@ async function hasChildren() {
     if (!conversationData.parentMessageId) {
         return false;
     }
-    const messages = await conversationMessages();
-    return getChildren(messages, conversationData.parentMessageId).length > 0;
+    return getChildren(messagesCache, conversationData.parentMessageId).length > 0;
 }
 
 async function hasSiblings() {
     if (!conversationData.parentMessageId) {
         return false;
     }
-    const messages = await conversationMessages();
-    return getSiblings(messages, conversationData.parentMessageId).length > 1;
+    return getSiblings(messagesCache, conversationData.parentMessageId).length > 1;
 }
 
 let availableCommands = [
@@ -261,8 +260,8 @@ let availableCommands = [
         description: 'Go right / to the next sibling.',
         available: hasSiblings,
         command: async () => {
-            const messages = await conversationMessages();
-            return selectSiblingMessage(getSiblingIndex(messages, conversationData.parentMessageId) + 1);
+            // const messages = await conversationMessages();
+            return selectSiblingMessage(getSiblingIndex(messagesCache, conversationData.parentMessageId) + 1);
         },
     },
     {
@@ -272,8 +271,8 @@ let availableCommands = [
         description: 'Go left / to the previous sibling.',
         available: hasSiblings,
         command: async () => {
-            const messages = await conversationMessages();
-            return selectSiblingMessage(getSiblingIndex(messages, conversationData.parentMessageId) - 1);
+            // const messages = await conversationMessages();
+            return selectSiblingMessage(getSiblingIndex(messagesCache, conversationData.parentMessageId) - 1);
         },
     },
     {
@@ -326,14 +325,14 @@ let availableCommands = [
         usage: '!history',
         description: 'Display conversation history in formatted boxes. If you want to copy the raw conversation history transcript, use !cp history or !pr history instead.',
         available: async () => Boolean(conversationData.parentMessageId),
-        command: async () => { await showHistory(); return conversation(); },
+        command: async () => { showHistory(); return conversation(); },
     },
     {
         name: '!exit - Exit CLooI',
         value: '!exit',
         usage: '!exit',
         description: 'Exit CLooI.',
-        command: async () => true,
+        command: async () => { await stopSettingsWatcher(); process.exit(); }
     },
     {
         name: '!resume - Resume last conversation',
@@ -418,6 +417,10 @@ async function showCommandDocumentation(command) {
     return conversation();
 }
 
+async function updateMessagesCache() {
+    messagesCache = await conversationMessages();
+}
+
 async function conversation() {
     console.log('Type "!" to access the command menu.');
     const prompt = inquirer.prompt([
@@ -437,9 +440,11 @@ async function conversation() {
     // This basically simulates a hybrid between having `suggestOnly: false` and `suggestOnly: true`.
     await new Promise(resolve => setTimeout(resolve, 0));
 
+    await updateMessagesCache();
+
     let userSuggestions = [];
     if (conversationData.parentMessageId) {
-        const targetMessage = await getMessageByIndex();
+        const targetMessage = getMessageByIndex();
         userSuggestions = client.constructor.getUserSuggestions(targetMessage?.details?.message) || [];
     }
 
@@ -485,7 +490,7 @@ async function conversation() {
         return conversation();
     }
     await concatMessages(message);
-    await showHistory();
+    showHistory();
     return generateMessage();
 }
 
@@ -584,6 +589,7 @@ async function generateMessage() {
                     _conversation.messages.push(conversationMessage);
                     if (idx === previewIdx) {
                         await client.conversationsCache.set(conversationId, _conversation);
+                        await updateMessagesCache();
 
                         spinner.stop();
                         if (empty) {
@@ -612,10 +618,15 @@ async function generateMessage() {
             }
             _conversation.messages.push(...newConversationMessages);
             await client.conversationsCache.set(conversationId, _conversation);
+            await updateMessagesCache();
+
             return selectMessage(previewMessage.id, conversationId);
         }
 
         await client.conversationsCache.set(conversationId, _conversation);
+        await updateMessagesCache();
+
+        // showHistory();
         return null;
     } catch (error) {
         spinner.stop();
@@ -639,6 +650,8 @@ async function generateMessage() {
             if (newConversationMessages.length > 0) {
                 _conversation.messages.push(...newConversationMessages);
                 await client.conversationsCache.set(conversationId, _conversation);
+                await updateMessagesCache();
+
                 if (previewMessage) {
                     return selectMessage(previewMessage.id, conversationId);
                 }
@@ -651,33 +664,33 @@ async function generateMessage() {
     return conversation();
 }
 
-async function retryResponse() {
+function retryResponse() {
     if (!conversationData.parentMessageId) {
         logWarning('No message to rewind to.');
         return conversation();
     }
-    const currentMessage = await getCurrentMessage();
+    const currentMessage = getCurrentMessage();
     if (!currentMessage) {
         logWarning('Current message not found.');
         return conversation();
     }
     conversationData.parentMessageId = currentMessage.parentMessageId;
     // logSuccess(`Rewound conversation to message ${conversationData.parentMessageId}.`);
-    const boxes = await historyBoxes();
+    const boxes = historyBoxes();
     if (boxes) {
         console.log(boxes);
     }
     return generateMessage();
 }
 
-async function getMessageByIndex(pathIndex = null, branchIndex = null) {
-    const messageHistory = await getHistory();
+function getMessageByIndex(pathIndex = null, branchIndex = null) {
+    const messageHistory = getHistory();
     if (!messageHistory) {
         return null;
     }
     let anchorMessage = null;
     if (pathIndex === null || pathIndex === '.') {
-        anchorMessage = await getCurrentMessage();
+        anchorMessage = getCurrentMessage();
     } else {
         if (pathIndex < 0) {
             pathIndex -= 1; // relative index
@@ -691,9 +704,9 @@ async function getMessageByIndex(pathIndex = null, branchIndex = null) {
     if (branchIndex === null) {
         return anchorMessage;
     }
-    const messages = await conversationMessages();
-    const siblingMessages = getSiblings(messages, anchorMessage.id);
-    const anchorSiblingIndex = getSiblingIndex(messages, anchorMessage.id);
+    // const messages = await conversationMessages();
+    const siblingMessages = getSiblings(messagesCache, anchorMessage.id);
+    const anchorSiblingIndex = getSiblingIndex(messagesCache, anchorMessage.id);
     if (branchIndex < 0) {
         branchIndex = anchorSiblingIndex + branchIndex;
     }
@@ -706,8 +719,8 @@ async function getMessageByIndex(pathIndex = null, branchIndex = null) {
     return siblingMessages[branchIndex];
 }
 
-async function rewindTo(index, branchIndex = null) {
-    const conversationMessage = await getMessageByIndex(index, branchIndex);
+function rewindTo(index, branchIndex = null) {
+    const conversationMessage = getMessageByIndex(index, branchIndex);
     if (!conversationMessage) {
         logWarning('Message not found.');
         return conversation();
@@ -716,7 +729,7 @@ async function rewindTo(index, branchIndex = null) {
 }
 
 async function rewind(idx, branchIndex = null) {
-    const messageHistory = await getHistory();
+    const messageHistory = getHistory();
     if (!messageHistory || messageHistory.length < 2) {
         return conversation();
     }
@@ -745,7 +758,9 @@ async function setConversationData(data) {
         ...conversationData,
         ...data,
     };
+    navigationHistory.push(conversationData);
     await client.conversationsCache.set('lastConversation', conversationData);
+    await updateMessagesCache();
 }
 
 async function selectMessage(messageId, conversationId = getConversationId()) {
@@ -754,13 +769,13 @@ async function selectMessage(messageId, conversationId = getConversationId()) {
         parentMessageId: messageId,
     });
     // logSuccess(`Selected message ${messageId}.`);
-    await showHistory();
+    showHistory();
     return conversation();
 }
 
 async function selectChildMessage(index = null) {
-    const messages = await conversationMessages();
-    const childMessages = getChildren(messages, conversationData.parentMessageId);
+    // const messages = await conversationMessages();
+    const childMessages = getChildren(messagesCache, conversationData.parentMessageId);
     if (childMessages.length === 0) {
         logWarning('No child messages.');
         return conversation();
@@ -793,8 +808,8 @@ async function selectChildMessage(index = null) {
 }
 
 async function selectSiblingMessage(index = null) {
-    const messages = await conversationMessages();
-    const siblingMessages = getSiblings(messages, conversationData.parentMessageId);
+    // const messages = await conversationMessages();
+    const siblingMessages = getSiblings(messagesCache, conversationData.parentMessageId);
     if (siblingMessages.length < 2) {
         logWarning('No sibling messages.');
         return conversation();
@@ -811,13 +826,13 @@ async function selectSiblingMessage(index = null) {
                 message: 'Select a sibling message:',
                 choices,
                 loop: true,
-                default: getSiblingIndex(messages, conversationData.parentMessageId) + 1,
+                default: getSiblingIndex(messagesCache, conversationData.parentMessageId) + 1,
                 pageSize: Math.min(siblingMessages.length * 2, 30),
             },
         ]);
         index = idx;
     }
-    const siblingMessage = await getMessageByIndex('.', index % siblingMessages.length);
+    const siblingMessage = getMessageByIndex('.', index % siblingMessages.length);
     if (!siblingMessage) {
         logWarning('Invalid index.');
         return conversation();
@@ -826,21 +841,29 @@ async function selectSiblingMessage(index = null) {
 }
 
 async function debug(args) {
-    const targetMessage = await getMessageByIndex(args[0], args[1]);
-    console.log(targetMessage.message);
 
-    return conversation();
+    console.log(clientOptions);
+
+    // return loadByTree();
+    
+    // console.log(conversationId);
+    // const targetMessage = await getMessageByIndex(args[0], args[1]);
+    // console.log(targetMessage.message);
+
+    // return conversation();
 }
 
 async function addMessage(message, conversationId = getConversationId()) {
     const convo = await client.conversationsCache.get(conversationId);
     convo.messages.push(message);
     await client.conversationsCache.set(conversationId, convo);
+    await updateMessagesCache();
 }
 
 async function concatMessages(newMessages) {
     const convId = getConversationId();
     const { conversationId, messageId } = await client.addMessages(convId, newMessages, conversationData.parentMessageId, true);
+    await updateMessagesCache();
     await setConversationData({
         conversationId,
         parentMessageId: messageId,
@@ -863,7 +886,7 @@ async function addMessages(newMessages = null) {
         return conversation();
     }
     await concatMessages(newMessages);
-    await showHistory();
+    showHistory();
     return conversation();
 }
 
@@ -882,7 +905,7 @@ async function useEditor() {
     }
     // console.log(message);
     await concatMessages(message);
-    await showHistory();
+    showHistory();
     return generateMessage();
 
     // return generateMessage(message);
@@ -891,7 +914,7 @@ async function useEditor() {
 async function editMessage(messageId, args = null) {
     const [pathIndex, branchIndex] = args;
     // const currentMessage = await getCurrentMessage();
-    const targetMessage = await getMessageByIndex(pathIndex, branchIndex);
+    const targetMessage = getMessageByIndex(pathIndex, branchIndex);
     if (!targetMessage) {
         logWarning('Message not found.');
         return conversation();
@@ -929,9 +952,9 @@ async function editMessage(messageId, args = null) {
 }
 
 async function mergeUp() {
-    const messages = await conversationMessages();
-    const currentMessage = await getCurrentMessage();
-    const parentMessage = getParent(messages, currentMessage.id);
+    // const messages = await conversationMessages();
+    const currentMessage = getCurrentMessage();
+    const parentMessage = getParent(messagesCache, currentMessage.id);
     if (!parentMessage) {
         logWarning('No parent message.');
         return conversation();
@@ -996,11 +1019,52 @@ async function loadConversationState(name = 'lastConversation') {
             conversationId,
         });
         logSuccess(`Resumed ${conversationId} at ${name}.`);
-        await showHistory();
+        showHistory();
         return conversation();
     }
     logWarning('Conversation not found.');
     return conversation();
+}
+
+async function loadByTree() {
+    const conversationsWithSavedStates = await savedStatesByConversation(client.conversationsCache);
+    const { conversationId } = await inquirer.prompt([
+        {
+            type: 'list',
+            name: 'conversationId',
+            message: 'Select a tree:',
+            choices: Object.entries(conversationsWithSavedStates).map(([conversationId, conversationInfo]) => (
+                {
+                name: `${conversationInfo?.name} (${conversationInfo?.states?.length} saved states)`, 
+                value: conversationId,
+                }
+            )),
+            pageSize: Math.min(conversationsWithSavedStates.length * 2, 15),
+        },
+    ]);
+    if (!conversationId) {
+        logWarning('No conversation id.');
+        return conversation();
+    }
+
+    const savedStatesInTree = conversationsWithSavedStates[conversationId].states.map(state => state.name)
+
+    let name;
+    const { conversationName } = await inquirer.prompt([
+        {
+            type: 'list',
+            name: 'conversationName',
+            message: 'Select a conversation to load:',
+            choices: savedStatesInTree,
+            pageSize: Math.min(savedStatesInTree.length * 2, 20),
+        },
+    ]);
+    name = conversationName;
+    if (!name) {
+        logWarning('No conversation name.');
+        return conversation();
+    }
+    return loadConversationState(name);
 }
 
 async function loadSavedState(name = null) {
@@ -1016,7 +1080,7 @@ async function loadSavedState(name = null) {
                 name: 'conversationName',
                 message: 'Select a conversation to load:',
                 choices: savedConversations,
-                pageSize: Math.min(savedConversations.length * 2, 15),
+                pageSize: Math.min(savedConversations.length * 2, 20),
             },
         ]);
         name = conversationName;
@@ -1029,13 +1093,13 @@ async function loadSavedState(name = null) {
 }
 
 async function loadConversation(conversationId) {
-    const { messages } = await client.conversationsCache.get(conversationId);
-    if (!messages) {
+    // const { messages } = await client.conversationsCache.get(conversationId);
+    if (!messagesCache) {
         logWarning('Conversation not found.');
         return conversation();
     }
     // conversationData.conversationId = conversationId;
-    const lastMessageId = messages[messages.length - 1].id;
+    const lastMessageId = messagesCache[messages.length - 1].id;
     // conversationData.parentMessageId = lastMessageId;
     await setConversationData({
         conversationId,
@@ -1043,7 +1107,7 @@ async function loadConversation(conversationId) {
     });
 
     logSuccess(`Resumed conversation ${conversationId}.`);
-    await showHistory();
+    showHistory();
     return conversation();
 }
 
@@ -1083,12 +1147,13 @@ async function exportConversation(conversationId = null) {
 
 async function newConversation() {
     conversationData = settings.cliOptions?.conversationData || settings.conversationData || {};
+    messagesCache = [];
     logSuccess('Started new conversation.');
     return conversation();
 }
 
-async function getConversationHistoryString() {
-    const messageHistory = await getHistory();
+function getConversationHistoryString() {
+    const messageHistory = getHistory();
     if (!messageHistory) {
         return null;
     }
@@ -1139,7 +1204,7 @@ async function printOrCopyData(action, args = null) {
     }
     const [index, branchIndex] = args;
 
-    const targetMessage = await getMessageByIndex(index, branchIndex);
+    const targetMessage = getMessageByIndex(index, branchIndex);
     if (!targetMessage) {
         logWarning('Current message not found.');
         return conversation();
@@ -1167,16 +1232,16 @@ async function printOrCopyData(action, args = null) {
             data = conversationData;
             break;
         case 'transcript':
-            data = await getConversationHistoryString();
+            data = getConversationHistoryString();
             break;
         case 'message':
             data = targetMessage;
             break;
         case 'messages':
-            data = await conversationMessages();
+            data = messagesCache;
             break;
         case 'messageHistory':
-            data = await getHistory();
+            data = getHistory();
             break;
         case 'settings':
             // console.log(`client: ${clientToUse}`);
@@ -1309,15 +1374,24 @@ function replaceWhitespace(str) {
     return str.replace(/\n /g, '\n⠀');
 }
 
-function conversationMessageBox(conversationMessage, messages, index = null) {
-    const children = getChildren(messages, conversationMessage.id);
-    const siblings = getSiblings(messages, conversationMessage.id);
-    const siblingIndex = getSiblingIndex(messages, conversationMessage.id);
+function navButton(node, idx, mainMessageId) { //, savedIds = []) {
+    // const navigationHistoryIds = navigationHistory.map(data => data.parentMessageId);
+    const buttonString = node.id === mainMessageId ? `[${idx}]` : `${idx}`;
+    return buttonString;
+    // return navigationHistoryIds.includes(node.id) ? chalk.blueBright(`${buttonString}`) : `${buttonString}`
+    // return savedIds.includes(node.id) ? chalk.yellow(`${buttonString}`) : navigationHistoryIds.includes(node.id) ? chalk.blueBright(`${buttonString}`) : `${buttonString}`
+}
+
+function conversationMessageBox(conversationMessage, index = null) {
+    const children = getChildren(messagesCache, conversationMessage.id);
+    const siblings = getSiblings(messagesCache, conversationMessage.id);
+    // const siblingIndex = getSiblingIndex(messages, conversationMessage.id);
     const aiMessage = Boolean(conversationMessage.role === getAILabel());
     const userMessage = Boolean(conversationMessage.role === client.names.user.display);
     const indexString = index !== null ? `[${index}] ` : '';
+    // const savedIds = await getSavedIds(client.conversationsCache);
     const childrenString = children.length > 0 ? ` ── !fw [${children.map((child, idx) => `${idx}`).join(' ')}]` : '';
-    const siblingsString = siblings.length > 1 ? ` ── !alt ${siblings.map((sibling, idx) => (idx === siblingIndex ? `[${idx}]` : `${idx}`)).join(' ')}` : '';
+    const siblingsString = siblings.length > 1 ? ` ── !alt ${siblings.map((sibling, idx) => navButton(sibling, idx, conversationMessage.id)).join(' ')}` : '';
     const messageText = replaceWhitespace(conversationMessage.message);
     return tryBoxen(messageText, {
         title: `${indexString}${conversationMessage.role}${siblingsString}${childrenString}`,
@@ -1355,14 +1429,14 @@ function suggestionsBoxes(suggestions) {
     return suggestions.map(suggestion => suggestionBox(suggestion)).join('\n');
 }
 
-async function historyBoxes() {
-    const messageHistory = await getHistory();
-    const messages = await conversationMessages();
-    return messageHistory?.map((conversationMessage, index) => conversationMessageBox(conversationMessage, messages, index)).join('\n');
+function historyBoxes() {
+    const messageHistory = getHistory();
+    // const messages = await conversationMessages();
+    return messageHistory?.map((conversationMessage, index) => conversationMessageBox(conversationMessage, index)).join('\n');
 }
 
-async function showHistory() {
-    const boxes = await historyBoxes();
+function showHistory() {
+    const boxes = historyBoxes();
     if (boxes) {
         conversationStart();
         const { systemMessage } = clientOptions.messageOptions;
@@ -1371,7 +1445,7 @@ async function showHistory() {
         }
         let suggestions = '';
         if (clientToUse === 'bing' && settings.cliOptions?.showSuggestions) {
-            const targetMessage = await getMessageByIndex();
+            const targetMessage = getMessageByIndex();
             const suggestedUserMessages = client.constructor.getUserSuggestions(targetMessage.details?.message);
             if (suggestedUserMessages && suggestedUserMessages.length > 0) {
                 suggestions = `\n${suggestionsBoxes(suggestedUserMessages)}`;
@@ -1387,20 +1461,21 @@ function getAILabel() {
 }
 
 function getConversationId(data = conversationData) {
-    const convId = data.conversationId || data.jailbreakConversationId;
-    if (!convId) {
-        // logWarning('No conversation id.');
-        return null;
-    }
-    return convId;
+    return getCid(data);
+    // const convId = data.conversationId || data.jailbreakConversationId;
+    // if (!convId) {
+    //     // logWarning('No conversation id.');
+    //     return null;
+    // }
+    // return convId;
 }
 
-async function getCurrentMessage() {
+function getCurrentMessage() {
     if (!conversationData?.parentMessageId) {
         // logWarning('No message id.');
         return [];
     }
-    const messages = await getHistory();
+    const messages = getHistory();
     return messages.find(message => message.id === conversationData.parentMessageId);
 }
 
@@ -1413,14 +1488,14 @@ async function conversationMessages() {
     return messages;
 }
 
-async function getHistory() {
-    const messages = await conversationMessages();
+function getHistory() {
+    // const messages = await conversationMessages();
     if (!conversationData.parentMessageId) {
         // logWarning('No parent message id.');
         return [];
     }
 
-    const messageHistory = getMessagesForConversation(messages, conversationData.parentMessageId);
+    const messageHistory = getMessagesForConversation(messagesCache, conversationData.parentMessageId);
 
     return messageHistory;
 }

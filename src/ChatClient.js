@@ -61,7 +61,7 @@ export default class ChatClient {
         this.modelPointers = {};
         this.n = null;
         this.setOptions(options);
-        this.options.debug = true;
+        // this.options.debug = true;
     }
 
     setOptions(options) {
@@ -76,6 +76,15 @@ export default class ChatClient {
             this.options = {
                 ...options,
             };
+        }
+        if (this.options.apiKey) {
+            this.apiKey = this.options.apiKey;
+        }
+        if (this.options.completionsUrl) {
+            this.completionsUrl = this.options.completionsUrl;
+        }
+        if (this.options.n) {
+            this.n = this.options.n;
         }
         const modelOptions = this.options.modelOptions || {};
         this.modelOptions = {

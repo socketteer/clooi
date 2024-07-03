@@ -44,27 +44,16 @@ const CLAUDE_DEFAULT_MODEL_OPTIONS = {
 };
 
 export default class ClaudeClient extends ChatClient {
-    constructor(apiKey, options) {
+    constructor(options = {}) {
         options.cache.namespace = options.cache.namespace || 'claude';
         super(options);
-        this.apiKey = apiKey;
+        this.apiKey = process.env.ANTHROPIC_API_KEY || '';
         this.completionsUrl = 'https://api.anthropic.com/v1/messages';
         this.modelOptions = CLAUDE_DEFAULT_MODEL_OPTIONS;
         this.participants = CLAUDE_PARTICIPANTS;
         this.modelInfo = CLAUDE_MODEL_INFO;
         this.n = 1;
         this.setOptions(options);
-    }
-
-    setOptions(options) {
-        super.setOptions(options);
-        if (this.options.openaiApiKey) {
-            this.apiKey = this.options.anthropicApiKey;
-        }
-        if (this.options.n) {
-            this.n = this.options.n;
-        }
-        return this;
     }
 
     getHeaders() {
@@ -112,28 +101,6 @@ export default class ClaudeClient extends ChatClient {
         }
     }
 
-    // async callAPI(params, opts = {}) {
-    //     let result = null;
-    //     const replies = {};
-    //     const stream = typeof opts.onProgress === 'function' && this.modelOptions.stream;
-    //     const n = opts.n || this.n;
-    //     result = await Promise.all([...Array(n).keys()].map(async idx => this.getCompletion(
-    //         params,
-    //         this.getHeaders(),
-    //         stream ? (message) => {
-    //             this.onProgressWrapper(message, replies, idx, opts);
-    //         } : null,
-    //         opts.abortController || new AbortController(),
-    //     )));
-    //     if (!stream) {
-    //         this.parseReplies(result, replies);
-    //     }
-
-    //     return {
-    //         replies,
-    //         result,
-    //     };
-    // }
 
     parseReplies(result, replies) {
         result.forEach((res, idx) => {

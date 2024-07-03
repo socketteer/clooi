@@ -38,24 +38,15 @@ const INFRASTRUCT_DEFAULT_MODEL_OPTIONS = userHandle => ({
 });
 
 export default class InfrastructClient extends ChatClient {
-    constructor(apiKey, options) {
+    constructor(options = {}) {
         options.cache.namespace = options.cache.namespace || 'infrastruct';
         super(options);
-        this.apiKey = apiKey;
+        this.apiKey = process.env.OPENAI_API_KEY || '';
         this.completionsUrl = 'https://api.openai.com/v1/completions';
         this.participants = INFRASTRUCT_PARTICIPANTS;
         this.modelInfo = INFRASTRUCT_MODEL_INFO;
         this.setOptions(options);
         this.modelOptions = INFRASTRUCT_DEFAULT_MODEL_OPTIONS(this.participants.user.author);
-        // this.options.debug = true;
-    }
-
-    setOptions(options) {
-        super.setOptions(options);
-        if (this.options.openaiApiKey) {
-            this.apiKey = this.options.openaiApiKey;
-        }
-        return this;
     }
 
     buildApiParams(userMessage, previousMessages = [], systemMessage = null) {
