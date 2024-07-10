@@ -1,5 +1,5 @@
 {
-  "name": "@socketteer/bingleton-api",
+  "name": "@socketteer/clooi",
   "version": "0.9",
   "description": "Command Loom Interface.",
   "main": "index.js",
