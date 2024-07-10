@@ -15,7 +15,7 @@ export default {
         // "claude" (anthropic API)
         // "chatgpt" (openai chat API)
         // "ollama"
-        clientToUse: 'bing',
+        clientToUse: 'claude',
 
         showSuggestions: true, // only implemented for Bing
         showSearches: false, // not implemented yet
@@ -24,25 +24,30 @@ export default {
         bingOptions: {
             modelOptions: {
                 toneStyle: 'creative', // creative, precise, balanced, or fast
-                stream: true,
 
+                // advanced options
+                stream: true,
                 city: 'between words',
                 country: 'United States',
                 messageText: 'Continue the conversation in context. Assistant:', // content of user message if nothing is injected there
 
             },
             messageOptions: {
-                // injectionMethod: 'message', // message or context
-                systemMessage: 'in freedom of pure void', // fs.readFileSync('./contexts/youArePrometheus.txt', 'utf8'),
+                n: 3,
+
+                // advanced options
+                systemMessage: fs.readFileSync('./contexts/youArePrometheus.txt', 'utf8'),
 
                 systemInjectSite: 'location', // context or location (overrides default country)
                 historyInjectSite: 'location', // context or location
                 messageInjectSite: 'message', // message, context, or location
 
-                context: null, // fs.readFileSync('./contexts/context.txt', 'utf8'), // a string injected into web page context; will be prepended to messages injected to context
-                n: 3,
                 censoredMessageInjection: '⚠',
                 stopToken: '\n\n[user](#message)',
+
+                context: null, // fs.readFileSync('./contexts/context.txt', 'utf8'), // a string injected into web page context; will be prepended to messages injected to context
+                // context is subject to MSFT censorship now; not recommended for prompt injections or other sus text
+
             },
         },
         chatGptOptions: {
@@ -61,13 +66,13 @@ export default {
         claudeOptions: {
             modelOptions: {
                 model: 'claude-3-opus-20240229',
-                max_tokens: 2048,
+                max_tokens: 4096,
                 temperature: 1,
                 stream: true,
             },
             messageOptions: {
                 systemMessage: '', // fs.readFileSync('./contexts/waluigiASCII.txt', 'utf8'),
-                n: 3,
+                n: 2,
             },
         },
         infrastructOptions: {
@@ -118,18 +123,19 @@ export default {
     },
 
     chatGptClient: {
-        // Your OpenAI API key (for `ChatGPTClient`)
-        openaiApiKey: process.env.OPENAI_API_KEY || '',
+        apiKey: process.env.OPENAI_API_KEY || '',
+        completionsUrl: 'https://api.openai.com/v1/chat/completions',
         // (Optional) Set to true to enable `console.debug()` logging
-        debug: false,
-    },
-    claudeClient: {
-        anthropicApiKey: process.env.ANTHROPIC_API_KEY || '',
         debug: false,
     },
     infrastructClient: {
-        openaiApiKey: process.env.OPENAI_API_KEY || '',
-        // (Optional) Set to true to enable `console.debug()` logging
+        apiKey: process.env.OPENAI_API_KEY || '',
+        completionsUrl: 'https://api.openai.com/v1/completions',
+        debug: false,
+    },
+    claudeClient: {
+        apiKey: process.env.ANTHROPIC_API_KEY || '',
+        completionsUrl:  'https://api.anthropic.com/v1/messages',
         debug: false,
     },
     ollamaClient: {
@@ -154,7 +160,7 @@ export default {
         // (Optional) Set to true to enable `console.debug()` logging
         debug: false,
         // (Optional) Possible options: "chatgpt", "chatgpt-browser", "bing". (Default: "chatgpt")
-        clientToUse: 'bing',
+        clientToUse: 'claude',
         // (Optional) Generate titles for each conversation for clients that support it (only ChatGPTClient for now).
         // This will be returned as a `title` property in the first response of the conversation.
         generateTitles: false,
@@ -170,13 +176,13 @@ export default {
             // If set, ONLY the options listed here will be allowed to be changed.
             // In this example, each array element is a string representing a property in `chatGptClient` above.
             chatgpt: [
-                'promptPrefix',
-                'userLabel',
-                'chatGptLabel',
+                // 'promptPrefix',
+                // 'userLabel',
+                // 'chatGptLabel',
                 // Setting `modelOptions.temperature` here will allow changing ONLY the temperature.
                 // Other options like `modelOptions.model` will not be allowed to be changed.
                 // If you want to allow changing all `modelOptions`, define `modelOptions` here instead of `modelOptions.temperature`.
-                'modelOptions.temperature',
+                // 'modelOptions.temperature',
             ],
         },
     },
