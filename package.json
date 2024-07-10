@@ -1,7 +1,7 @@
 {
-  "name": "@waylaidwanderer/chatgpt-api",
-  "version": "1.37.3",
-  "description": "A ChatGPT implementation using the official ChatGPT model via OpenAI's API.",
+  "name": "@socketteer/bingleton-api",
+  "version": "0.9",
+  "description": "Command Loom Interface.",
   "main": "index.js",
   "bin": {
     "chatgpt-api": "bin/server.js",
