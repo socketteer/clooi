@@ -32,6 +32,7 @@ let responseData = {};
 let clientToUse;
 let client;
 let clientOptions;
+let steeringFeatures = {};
 
 async function loadSettings() {
     // TODO dynamic import isn't updating the settings file
@@ -368,6 +369,27 @@ let availableCommands = [
         description: 'Run debug command.',
         command: async args => debug(args.slice(1)),
     },
+    {
+        name: '!steer - change steering feature',
+        value: '!steer',
+        usage: '!steer <id> <amount>',
+        description: '',
+        command: async args => {
+            if (args.length == 1) {
+                steeringFeatures = {};
+                console.log("Reset steering features");
+            } else if (args[1] == 'cat') {
+                console.log("Steering features", steeringFeatures);
+            } else {
+                let amount = 10
+                if (args[2] != null) {
+                    amount = args[2];
+                }
+                steeringFeatures["feat_34M_20240604_" + args[1]] = Number(amount);
+            }
+            return conversation();
+        },
+    },
 ];
 
 inquirer.registerPrompt('autocomplete', inquirerAutocompletePrompt);
@@ -475,7 +497,14 @@ async function generateMessage() {
 
     const context = await client.yieldGenContext(
         null,
-        clientOptions.modelOptions,
+        {
+            ...clientOptions.modelOptions,
+            ...(Object.keys(steeringFeatures) != 0 ? {
+                steering: {
+                    feature_levels: steeringFeatures
+                }
+            } : {}),
+        },
         {
             ...conversationData,
             ...clientOptions.messageOptions,

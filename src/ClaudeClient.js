@@ -21,6 +21,11 @@ const CLAUDE_MODEL_INFO = {
         vision: true,
         maxResponseTokens: 10000,
     },
+    'claude-3-sonnet-20240229-steering-preview': {
+        contextLength: 100000,
+        vision: true,
+        maxResponseTokens: 10000,
+    },
 };
 
 const CLAUDE_PARTICIPANTS = {
@@ -63,10 +68,16 @@ export default class ClaudeClient extends ChatClient {
     }
 
     getHeaders() {
+        let anthropicBeta
+        if (this.modelOptions.includes('steering')) {
+            anthropicBeta = 'steering-2024-06-04';
+        } else {
+            anthropicBeta = 'messages-2023-12-15';
+        }
         return {
             'x-api-key': this.apiKey,
             'anthropic-version': '2023-06-01',
-            'anthropic-beta': 'messages-2023-12-15',
+            'anthropic-beta': anthropicBeta,
         };
     }
 
