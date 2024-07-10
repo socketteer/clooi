@@ -100,35 +100,15 @@ The `!help` command will show a list of commands and their descriptions. You can
 
 </details>
 
-### CLI Options
-
-- `cliOptions.clientToUse`: The API client to use. 
-    - `'bing'`: Use the BingAIClient (unofficial Copilot API)
-    - `'infrastruct'`: Use the Infrastruct client (works with any OpenAI completion model)
-    - `'claude'`: Use the ClaudeClient (works with any Anthropic API chat model)
-    - `'chatgpt'`: Use the chatGPT API client. **NOT IMPLEMENTED**
-- `cliOptions.showSuggestions`: Whether to show user suggestions after Bing messages.
-- `cliOptions.showSearches`: Whether to show the searches that Bing makes. **NOT IMPLEMENTED**
-- `cliOptions.bingOptions`: Dictionary of options to configure BingAPIClient, used when `clientToUse === 'bing'`.
-    - `messageOptions`: Options sent per BingAPIClient message request. See documentation for [BingAIClient](#bingaiclient) sendMessage parameters for details about options.
-- `cliOptions.infrastructOptions`: Dictionary of options to configure InfrastructClient, used when `clientToUse === 'infrastruct'`.
-- `cliOptions.claudeOptions`: Dictionary of options to configure InfrastructClient, used when `clientToUse === 'claude'`.
-
 #### Changing default options
 
-The default options for the CLI app are stored in `settings.js`, under `cliOptions`. You can change the default options by modifying this file. These options will load by default when you run the CLI app or when you run the `!reload` command.
+The default options for the CLI app are stored in `settings.js`, under `cliOptions`. You can change the default options by modifying this file. The changes to the settings will take effect when the file is saved.
 
 The system prompt (passed as a request parameter for Claude, prepended to prompt for Infrastruct, injected after Bing's normal system prompt) defaults are stored in text files in `contexts/` specified separately for each client in `settings.js/cliOptions`. You can change the content of the files to change the default system prompt and context, or point to different files in `settings.js`, or write the desired system prompt string directly in `settings.js`. The `contexts/` folder also contains alternative system prompts.
 
 ### Saving and loading conversation states
 
 All messages are saved in `cache.json`, but you can save a named pointer to a specific conversation state using the `!save` command. You can then load the conversation state at that point using the `!load` command.
-
-### Continuing messages (Claude)
-
-Claude can continue messages from the last Claude message in the conversation, treating the context as continuous, if you use the `!gen` command. 
-
-However, the Anthropic API will reject conversations that have more than one Claude (or User) message in a row. So after using `!gen`, to continue the conversation, you must use `!merge` to merge the second Claude message with the first.
 
 ## BingAIClient
 
