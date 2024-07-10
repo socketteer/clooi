@@ -1,5 +1,11 @@
 # Change log
 
+## 2024-7-9
+* track and indicate visited status of messages
+
+## 2024-7-3
+* Settings now automatically update when the settings file is changed without requiring a restart
+
 ## 2024-6-4
 
 ### Impacts UX

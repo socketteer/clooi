@@ -239,7 +239,7 @@ export default class BingAIClient extends ChatClient {
         const {
             messageText = 'Continue the conversation in context. Assistant:',
             toneStyle = 'creative',
-            city = 'Ann Arbor, Michigan',
+            city = 'Redmond, Washington',
             country = 'United States',
             contextDescription = null,
             sourceName = null,

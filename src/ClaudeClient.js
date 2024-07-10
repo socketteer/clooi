@@ -58,7 +58,7 @@ export default class ClaudeClient extends ChatClient {
 
     getHeaders() {
         let anthropicBeta
-        if (this.modelOptions.includes('steering')) {
+        if ('steering' in this.options && this.options.steering) {
             anthropicBeta = 'steering-2024-06-04';
         } else {
             anthropicBeta = 'messages-2023-12-15';

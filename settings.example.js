@@ -15,7 +15,7 @@ export default {
         // "claude" (anthropic API)
         // "chatgpt" (openai chat API)
         // "ollama"
-        clientToUse: 'claude',
+        clientToUse: 'bing',
 
         showSuggestions: true, // only implemented for Bing
         showSearches: false, // not implemented yet

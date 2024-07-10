@@ -553,6 +553,7 @@ export default class ChatClient {
             parentMessageId,
             role,
             message: message.text,
+            unvisited: true,
             ...(message.type ? { type: message.type } : {}),
             ...(message.details ? { details: message.details } : {}),
             ...opts,

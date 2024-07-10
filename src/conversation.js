@@ -10,7 +10,7 @@ export function getMessagesForConversation(messages, messageId) {
     let currentMessageId = messageId;
     while (currentMessageId) {
         // eslint-disable-next-line no-loop-func
-        const message = messages.find(m => m.id === currentMessageId);
+        const message = getMessageById(messages, currentMessageId);
         if (!message) {
             break;
         }
@@ -19,6 +19,10 @@ export function getMessagesForConversation(messages, messageId) {
     }
 
     return messageHistory;
+}
+
+export function getMessageById(messages, messageId) {
+    return messages.find(m => m.id === messageId);
 }
 
 export function getChildren(messages, messageId) {
