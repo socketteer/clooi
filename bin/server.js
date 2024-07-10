@@ -5,9 +5,8 @@ import { FastifySSEPlugin } from '@waylaidwanderer/fastify-sse-v2';
 import fs from 'fs';
 import { pathToFileURL } from 'url';
 import { KeyvFile } from 'keyv-file';
-import ChatGPTClient from '../src/ChatGPTClient.js';
-import ChatGPTBrowserClient from '../src/ChatGPTBrowserClient.js';
-import BingAIClient from '../src/BingAIClient.js';
+import { getClient } from './util.js';
+import { on } from 'events';
 
 const arg = process.argv.find(_arg => _arg.startsWith('--settings'));
 const path = arg?.split('=')[1] ?? './settings.js';
@@ -39,7 +38,7 @@ if (settings.storageFilePath && !settings.cacheOptions.store) {
     settings.cacheOptions.store = new KeyvFile({ filename: settings.storageFilePath });
 }
 
-const clientToUse = settings.apiOptions?.clientToUse || settings.clientToUse || 'chatgpt';
+const clientToUse = settings.apiOptions?.clientToUse || settings.clientToUse || 'claude';
 const perMessageClientOptionsWhitelist = settings.apiOptions?.perMessageClientOptionsWhitelist || null;
 
 const server = fastify();
@@ -52,6 +51,7 @@ await server.register(cors, {
 server.get('/ping', () => Date.now().toString());
 
 server.post('/conversation', async (request, reply) => {
+    console.log('Received request:', request.body);
     const body = request.body || {};
     const abortController = new AbortController();
 
@@ -62,13 +62,15 @@ server.post('/conversation', async (request, reply) => {
     });
 
     let onProgress;
-    if (body.stream === true) {
-        onProgress = (token) => {
+    const stream = body.stream || body.modelOptions?.stream;
+    if (stream === true) {
+        onProgress = (diff) => {
+            // console.log('Token:', diff);
             if (settings.apiOptions?.debug) {
-                console.debug(token);
+                console.debug(diff);
             }
-            if (token !== '[DONE]') {
-                reply.sse({ id: '', data: JSON.stringify(token) });
+            if (diff !== '[DONE]') {
+                reply.sse({ id: '', data: JSON.stringify(diff) });
             }
         };
     } else {
@@ -78,51 +80,35 @@ server.post('/conversation', async (request, reply) => {
     let result;
     let error;
     try {
-        if (!body.message) {
+        if (!body.modelOptions) {
             const invalidError = new Error();
             invalidError.data = {
                 code: 400,
-                message: 'The message parameter is required.',
+                modelOptions: 'The message parameter is required.',
             };
             // noinspection ExceptionCaughtLocallyJS
             throw invalidError;
         }
 
-        let clientToUseForMessage = clientToUse;
-        const clientOptions = filterClientOptions(body.clientOptions, clientToUseForMessage);
-        if (clientOptions && clientOptions.clientToUse) {
-            clientToUseForMessage = clientOptions.clientToUse;
-            delete clientOptions.clientToUse;
-        }
+        let clientToUseForMessage = body.client || clientToUse;
 
-        let { shouldGenerateTitle } = body;
-        if (typeof shouldGenerateTitle !== 'boolean') {
-            shouldGenerateTitle = settings.apiOptions?.generateTitles || false;
-        }
+        const messageClient = getClient(clientToUseForMessage, settings);
 
-        const messageClient = getClient(clientToUseForMessage);
+        result = await messageClient.standardCompletion(
+            body.messages,
+            body.modelOptions,
+            // apiParams,
+            {
+                // n: 1,
+                ...body.opts,
+                abortController: abortController,
+                onProgress,
+                onFinished: async (idx) => {
+                    console.log('Finished', idx);
+                }
+            }
+        )
 
-        result = await messageClient.sendMessage(body.message, {
-            jailbreakConversationId: body.jailbreakConversationId,
-            conversationId: body.conversationId ? body.conversationId.toString() : undefined,
-            parentMessageId: body.parentMessageId ? body.parentMessageId.toString() : undefined,
-            systemMessage: body.systemMessage,
-            context: body.context,
-            encryptedConversationSignature: body.encryptedConversationSignature,
-            // conversationSignature: body.conversationSignature,
-            clientId: body.clientId,
-            invocationId: body.invocationId,
-            shouldGenerateTitle, // only used for ChatGPTClient
-            toneStyle: body.toneStyle,
-            stopToken: body.stopToken,
-            userMessageInjection: body.userMessageInjection,
-            injectionMethod: body.injectionMethod,
-            censoredMessageInjection: body.censoredMessageInjection,
-            appendMessages: body.appendMessages,
-            clientOptions,
-            onProgress,
-            abortController,
-        });
     } catch (e) {
         error = e;
     }
@@ -131,7 +117,7 @@ server.post('/conversation', async (request, reply) => {
         if (settings.apiOptions?.debug) {
             console.debug(result);
         }
-        if (body.stream === true) {
+        if (stream === true) {
             reply.sse({ event: 'result', id: '', data: JSON.stringify(result) });
             reply.sse({ id: '', data: '[DONE]' });
             await nextTick();
@@ -147,7 +133,7 @@ server.post('/conversation', async (request, reply) => {
         console.debug(error);
     }
     const message = error?.data?.message || error?.message || `There was an error communicating with ${clientToUse === 'bing' ? 'Bing' : 'ChatGPT'}.`;
-    if (body.stream === true) {
+    if (stream === true) {
         reply.sse({
             id: '',
             event: 'error',
@@ -166,6 +152,7 @@ server.listen({
     port: settings.apiOptions?.port || settings.port || 3000,
     host: settings.apiOptions?.host || 'localhost',
 }, (error) => {
+    console.log(`Server listening on ${server.server.address().port}`);
     if (error) {
         console.error(error);
         process.exit(1);
@@ -174,26 +161,6 @@ server.listen({
 
 function nextTick() {
     return new Promise(resolve => setTimeout(resolve, 0));
-}
-
-function getClient(clientToUseForMessage) {
-    switch (clientToUseForMessage) {
-        case 'bing':
-            return new BingAIClient({ ...settings.bingAiClient, cache: settings.cacheOptions });
-        case 'chatgpt-browser':
-            return new ChatGPTBrowserClient(
-                settings.chatGptBrowserClient,
-                settings.cacheOptions,
-            );
-        case 'chatgpt':
-            return new ChatGPTClient(
-                settings.openaiApiKey || settings.chatGptClient.openaiApiKey,
-                settings.chatGptClient,
-                settings.cacheOptions,
-            );
-        default:
-            throw new Error(`Invalid clientToUse: ${clientToUseForMessage}`);
-    }
 }
 
 /**

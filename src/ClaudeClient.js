@@ -104,7 +104,7 @@ export default class ClaudeClient extends ChatClient {
 
     parseReplies(result, replies) {
         result.forEach((res, idx) => {
-            replies[idx] = res.choices[0].message.content;
+            replies[idx] = res.content[0].text;
         });
     }
 

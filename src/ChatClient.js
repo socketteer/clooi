@@ -259,6 +259,22 @@ export default class ChatClient {
         };
     }
 
+    async standardCompletion(messages={}, modelOptions = {}, opts = {}) {
+        const {
+            userMessage,
+            previousMessages,
+            systemMessage,
+        } = messages;
+        
+        const apiParams = {
+            ...modelOptions,
+            ...this.buildApiParams(userMessage, previousMessages, systemMessage, { ...modelOptions, ...opts }),
+        };
+
+        result = await this.callAPI(apiParams, opts);
+        return result
+    }
+
     getHeaders() {
         return {
             Authorization: `Bearer ${this.apiKey}`,
@@ -328,10 +344,6 @@ export default class ChatClient {
             opts.abortController || new AbortController(),
         );
 
-        // console.log('params:', params);
-        // console.log(opts);
-        // console.log(n);
-
         if (n) {
             result = await Promise.all([...Array(n).keys()].map(async idx => completion(
                 message => this.onProgressIndexical(message, replies, idx, opts),
@@ -349,6 +361,7 @@ export default class ChatClient {
     }
 
     async getCompletion(modelOptions, onProgress, abortController, debug = false) {
+
         const opts = {
             method: 'POST',
             headers: {

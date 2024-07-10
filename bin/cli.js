@@ -30,7 +30,6 @@ import {
     getSiblings,
     getSiblingIndex,
     getParent,
-    getMessageById,
 } from '../src/conversation.js';
 
 const arg = process.argv.find(_arg => _arg.startsWith('--settings'));
