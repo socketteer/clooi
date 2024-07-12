@@ -26,6 +26,11 @@ const CLAUDE_MODEL_INFO = {
         vision: true,
         maxResponseTokens: 10000,
     },
+    'claude-3-5-sonnet-20240620': {
+        contextLength: 100000,
+        vision: true,
+        maxResponseTokens: 10000,
+    },
 };
 
 const CLAUDE_PARTICIPANTS = {
