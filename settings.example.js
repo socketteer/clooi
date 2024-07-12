@@ -3,7 +3,9 @@ import * as fs from 'fs';
 export default {
     // Options for the Keyv cache, see https://www.npmjs.com/package/keyv.
     // This is used for storing conversations, and supports additional drivers (conversations are stored in memory by default).
-    cacheOptions: {},
+    cacheOptions: {
+        namespace: null, // if namespace is null, it will use the clientToUse
+    },
     // If set, chat clients will use `keyv-file` to store conversations to this JSON file instead of in memory.
     // However, `cacheOptions.store` will override this if set
     storageFilePath: process.env.STORAGE_FILE_PATH || './cache.json',
