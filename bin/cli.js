@@ -17,11 +17,6 @@ import clipboard from 'clipboardy';
 import inquirer from 'inquirer';
 import inquirerAutocompletePrompt from 'inquirer-autocomplete-prompt';
 import crypto from 'crypto';
-// import ChatGPTClient from '../src/ChatGPTClient.js';
-// import BingAIClient from '../src/BingAIClient.js';
-// import InfrastructClient from '../src/InfrastructClient.js';
-// import ClaudeClient from '../src/ClaudeClient.js';
-// import OllamaClient from '../src/OllamaClient.js';
 import { getClient, getClientSettings } from './util.js';
 import { getCid, savedStatesByConversation, getSavedIds } from '../src/cacheUtil.js';
 import {
@@ -517,6 +512,8 @@ async function generateMessage() {
         conversation: _conversation,
     } = context;
 
+    localConversation = _conversation;
+
     // console.log('apiParams', apiParams);
     // console.log('modelOptions', clientOptions.modelOptions);
     // console.log('messageOptions', clientOptions.messageOptions);
@@ -580,10 +577,12 @@ async function generateMessage() {
                         ...(data ? { details: data } : {}),
                         ...(stopReason ? { stopReason } : {}),
                     });
-                    _conversation.messages.push(conversationMessage);
+                    localConversation.messages.push(conversationMessage);
                     if (idx === previewIdx) {
-                        await client.conversationsCache.set(conversationId, _conversation);
-                        await pullFromCache();
+                        // await pullFromCache();
+                        await client.conversationsCache.set(conversationId, localConversation);
+                        // localConversation = _conversation;
+                        // await pullFromCache();
 
                         spinner.stop();
                         if (empty) {
@@ -610,15 +609,17 @@ async function generateMessage() {
                     previewMessage = conversationMessage;
                 }
             }
-            _conversation.messages.push(...newConversationMessages);
-            await client.conversationsCache.set(conversationId, _conversation);
-            await pullFromCache();
+            localConversation.messages.push(...newConversationMessages);
+            await client.conversationsCache.set(conversationId, localConversation);
+            // await pullFromCache();
 
             return selectMessage(previewMessage.id, conversationId);
         }
 
-        await client.conversationsCache.set(conversationId, _conversation);
-        await pullFromCache();
+        // await pullFromCache();
+        await client.conversationsCache.set(conversationId, localConversation);
+        // localConversation = _conversation;
+        // await pullFromCache();
 
         // showHistory();
         return null;
@@ -642,9 +643,10 @@ async function generateMessage() {
                 }
             }
             if (newConversationMessages.length > 0) {
-                _conversation.messages.push(...newConversationMessages);
-                await client.conversationsCache.set(conversationId, _conversation);
-                await pullFromCache();
+                localConversation.messages.push(...newConversationMessages);
+                // await pullFromCache();
+                await client.conversationsCache.set(conversationId, localConversation);
+                // localConversation = localConversation;
 
                 if (previewMessage) {
                     return selectMessage(previewMessage.id, conversationId);
