@@ -1,3 +1,7 @@
+## IMPORTANT NOTE: IF YOU ARE USING CLooI TO TALK TO SYDNEY
+
+The default settings file is configured with a Copilot Pro cookie, but there is an hourly rate limit for user on the model. If you have your own Copilot Pro account, copy your own Copilot Pro cookie into bingAIClient.cookies. If it doesn't work, try replacing only the cookies that are different between the default cookies string and your cookies.
+
 # Bingleton API and CLooI
 
 If you are a complete n00b to coding, you can consult the [n00b's guide to running the CLooI](./n00b-guide.md) which is written for non-coders unlike some of this readme.
