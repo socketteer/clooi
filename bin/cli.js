@@ -626,7 +626,7 @@ async function generateMessage() {
     } catch (error) {
         spinner.stop();
         console.log(error);
-        if (streamedMessages[previewIdx]) {
+        if (streamedMessages && Object.keys(streamedMessages).length > 0) {
             // console.log(streamedMessages);
             const newConversationMessages = [];
             let previewMessage;

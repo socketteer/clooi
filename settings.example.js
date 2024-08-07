@@ -110,7 +110,7 @@ export default {
         // The "_U" cookie value from bing.com
         userToken: '',
         // If the above doesn't work, provide all your cookies as a string instead
-        cookies: 'ANON=A=07CD59DD20B766CD60DF538FFFFFFFFF&E=1dd8&W=1; _U=1guLX6D9tlGeoGLKRQA9_Lrk5rvRaKNmpy3L3orOKGXbvlHCvv8y3Ilo0_Cl9YdqZ8FAI9k81dQtvh-WG3BS816O3rnnCvogxeYmrvF_QV1IIy7AqgKsr3cI587bldPMxQ3JD8Vromg_d9rFG6HquVGNO28ZzVffyLocOPIv6-dp1mJRPJNxadiIIC5qxya6HNeZhcgKZwVK0pOI55KOqvQ; _RwBf=r=1&p=bingcopilotwaitlist&c=MY00IA&t=3716&s=2023-02-13T15:26:43.1314498+00:00&rwred=0&wls=2&wlb=0&wle=0&ccp=1&cpt=0&lka=0&lkt=0&aad=0&TH=&mta=0&e=3n-OfNZU5qtEun5_Inx3OzazC_h6_bnS5ugQSqq1O5fn5qshuWJre7lKiw7WiX60mkV0qiq9SN6Rvfm-X33Q1A&A=07CD59DD20B766CD60DF538FFFFFFFFF',
+        cookies: 'ANON=A=07CD59DD20B766CD60DF538FFFFFFFFF&E=1dd8&W=1; _U=1G-WIqeTv6BzW3kEeGD-XymN5yVasXcI8dmoeRUXyPLb1cGAKzeMZg9HZ4PC63z7d0-dOzN2WXEFASJChIFvTkT8_qRVO9K3mx16u99d1XDWE-yAWjRLcSpm4CPwEPQNHl5yWmUn8xKOllK0TndBzerhMi4xbUwct8AUSEIceBSLa8K6YcRnOqmMuk_GBgTDUQZhlpqHA4MiHaU2-vbEQHA; _RwBf=r=1&p=bingcopilotwaitlist&c=MY00IA&t=3716&s=2023-02-13T15:26:43.1314498+00:00&rwred=0&wls=2&wlb=0&wle=0&ccp=1&cpt=0&lka=0&lkt=0&aad=0&TH=&mta=0&e=3n-OfNZU5qtEun5_Inx3OzazC_h6_bnS5ugQSqq1O5fn5qshuWJre7lKiw7WiX60mkV0qiq9SN6Rvfm-X33Q1A&A=07CD59DD20B766CD60DF538FFFFFFFFF',
 
         // A proxy string like "http://<ip>:<port>"
         proxy: '',
