@@ -3,6 +3,7 @@ import BingAIClient from '../src/BingAIClient.js';
 import InfrastructClient from '../src/InfrastructClient.js';
 import ClaudeClient from '../src/ClaudeClient.js';
 import OllamaClient from '../src/OllamaClient.js';
+import OpenRouterClient from '../src/OpenRouterClient.js';
 
 const settings = {
     clientToUse: {
@@ -26,7 +27,11 @@ const settings = {
             },
             // {
             //     value: 'ollama',
-            // }
+            // },
+            {
+                value: 'openrouter',
+                description: 'OpenRouter API',
+            }
         ],
         default: 'claude',
         description: 'API client to use',
@@ -217,6 +222,12 @@ export function getClientSettings(clientToUse, settings) {
                 ...settings.cliOptions.chatGptOptions,
             };
             break;
+        case 'openrouter':
+            clientOptions = {
+                ...settings.openRouterClient,
+                ...settings.cliOptions.openRouterOptions,
+            };
+            break;
         default:
             throw new Error('Invalid clientToUse setting.');
     }
@@ -236,6 +247,7 @@ export function getClient(clientToUse, settings) {
         case 'claude': client = new ClaudeClient(clientOptions); break;
         case 'ollama': client = new OllamaClient(clientOptions); break;
         case 'chatgpt': client = new ChatGPTClient(clientOptions); break;
+        case 'openrouter': client = new OpenRouterClient(clientOptions); break;
         default: throw new Error('Invalid clientToUse setting.');
     }
     return client;
