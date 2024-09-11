@@ -47,6 +47,9 @@ let steeringFeatures = {};
 async function initializeSettingsWatcher(path) {
     await updateSettings(path);
 
+    // stop the previous watcher if it exists
+    await stopSettingsWatcher();
+
     watcher = chokidar.watch(path);
     watcher.on('change', () => updateSettings(path));
 
@@ -584,6 +587,10 @@ async function generateMessage() {
                         // localConversation = _conversation;
                         // await pullFromCache();
 
+                        // remove event listeners
+                        process.removeAllListeners('SIGINT');
+
+
                         spinner.stop();
                         if (empty) {
                             return conversation();
@@ -597,8 +604,12 @@ async function generateMessage() {
 
         responseData.response = results;
 
+
         if (!streamedMessages[previewIdx]) {
             // console.log('not streaming');
+                    // remove event listeners
+            process.removeAllListeners('SIGINT');
+
             spinner.stop();
             const newConversationMessages = [];
             let previewMessage;
@@ -613,6 +624,7 @@ async function generateMessage() {
             await client.conversationsCache.set(conversationId, localConversation);
             // await pullFromCache();
 
+            
             return selectMessage(previewMessage.id, conversationId);
         }
 
@@ -624,6 +636,11 @@ async function generateMessage() {
         // showHistory();
         return null;
     } catch (error) {
+
+
+        // remove event listeners
+        process.removeAllListeners('SIGINT');
+    
         spinner.stop();
         console.log(error);
         if (streamedMessages && Object.keys(streamedMessages).length > 0) {
@@ -657,6 +674,8 @@ async function generateMessage() {
         }
         // throw error;
     }
+    // remove event listeners
+    process.removeAllListeners('SIGINT');
     return conversation();
 }
 
