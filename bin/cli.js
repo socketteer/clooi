@@ -588,8 +588,6 @@ async function generateMessage() {
                         // await pullFromCache();
 
                         // remove event listeners
-                        process.removeAllListeners('SIGINT');
-
 
                         spinner.stop();
                         if (empty) {
@@ -602,13 +600,14 @@ async function generateMessage() {
             },
         );
 
+        process.removeAllListeners('SIGINT');
+
         responseData.response = results;
 
 
         if (!streamedMessages[previewIdx]) {
             // console.log('not streaming');
-                    // remove event listeners
-            process.removeAllListeners('SIGINT');
+            // remove event listeners
 
             spinner.stop();
             const newConversationMessages = [];
