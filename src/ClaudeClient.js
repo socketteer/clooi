@@ -1,4 +1,5 @@
 import ChatClient from './ChatClient.js';
+import { getMessagesForConversation, getChildren, getParent } from './conversation.js';
 
 const CLAUDE_MODEL_INFO = {
     default: {
@@ -116,39 +117,74 @@ export default class ClaudeClient extends ChatClient {
     }
 
     buildApiParams(userMessage = null, previousMessages = [], systemMessage = null) {
-        const { messages: history, system } = super.buildApiParams(userMessage, previousMessages, systemMessage);
-        const mergedMessageHistory = [];
-        let lastMessage = null;
-        const cacheEnabled = this.options?.cacheOptions?.enabled || this.cache?.enabled || false;
+       const { messages: history, system } = super.buildApiParams(userMessage, previousMessages, systemMessage);
+       const mergedMessageHistory = [];
+       let lastMessage = null;
+       const cacheEnabled = this.options?.cacheOptions?.enabled || this.cache?.enabled || false;
+       const MAX_CACHE_BLOCKS = 4;
+       
+       // Check if we're at a point where conversation branches into multiple paths
+       const currentBranch = getMessagesForConversation(previousMessages, userMessage?.parentMessageId);
+       const isBranchingPoint = previousMessages.length > 0 && 
+           getChildren(previousMessages, previousMessages[previousMessages.length - 1].id).length > 1;
 
-        for (const message of history) {
-            if (lastMessage && lastMessage.role === message.role) {
-                const lastContent = lastMessage.content[lastMessage.content.length - 1];
-                lastContent.text += message.content;
-            } else {
-                const messageWithCache = {
-                    role: message.role,
-                    content: [{
-                        type: 'text',
-                        text: message.content,
-                        ...(cacheEnabled && { cache_control: { type: 'ephemeral' } })
-                    }]
-                };
-                lastMessage = messageWithCache;
-                mergedMessageHistory.push(messageWithCache);
-            }
-        }
+       // Find last two points where conversation branched into multiple paths
+       const branchPoints = [];
+       let messageId = userMessage?.parentMessageId;
+       while (messageId && branchPoints.length < 2) {
+           if (getChildren(previousMessages, messageId).length > 1) {
+               branchPoints.push(messageId);
+           }
+           messageId = getParent(previousMessages, messageId)?.id;
+       }
 
-        const systemWithCache = system ? [{
-            type: 'text',
-            text: system,
-            ...(cacheEnabled && { cache_control: { type: 'ephemeral' } })
-        }] : undefined;
+       // Determine if current message should be a cache checkpoint
+       const shouldCacheMessage = (message, index) => {
+           if (!cacheEnabled) return false;
 
-        return {
-            messages: mergedMessageHistory,
-            ...(systemWithCache ? { system: systemWithCache } : {})
-        };
+           if (branchPoints.includes(message.id)) return true;
+           if (isBranchingPoint && index === mergedMessageHistory.length - 1) return true;
+
+           const usedCacheBlocks = branchPoints.length + (isBranchingPoint ? 1 : 0);
+           const remainingBlocks = MAX_CACHE_BLOCKS - usedCacheBlocks;
+           if (remainingBlocks > 0) {
+               return currentBranch.length >= 10 && currentBranch.length % 10 === 0;
+           }
+
+           return false;
+       };
+
+       for (const [index, message] of history.entries()) {
+           if (lastMessage && lastMessage.role === message.role) {
+               const lastContent = lastMessage.content[lastMessage.content.length - 1];
+               lastContent.text += message.content;
+           } else {
+               const messageContent = {
+                   type: 'text',
+                   text: message.content,
+                   ...(shouldCacheMessage(message, index) && { cache_control: { type: 'ephemeral' } })
+               };
+
+               const messageWithOptionalCache = {
+                   role: message.role,
+                   content: [messageContent]
+               };
+
+               lastMessage = messageWithOptionalCache;
+               mergedMessageHistory.push(messageWithOptionalCache);
+           }
+       }
+
+       // Add system message to cache if present
+       const systemWithCache = system ? [{
+           type: 'text',
+           text: system,
+           ...(cacheEnabled && { cache_control: { type: 'ephemeral' } })
+       }] : undefined;
+
+       return {
+           messages: mergedMessageHistory,
+           ...(systemWithCache ? { system: systemWithCache } : {})
+       };
     }
 }
-
