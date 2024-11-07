@@ -62,9 +62,11 @@ export default class ClaudeClient extends ChatClient {
     }
 
     getHeaders() {
-        let anthropicBeta
+        let anthropicBeta;
         if ('steering' in this.options && this.options.steering) {
             anthropicBeta = 'steering-2024-06-04';
+        } else if (this.options?.cacheOptions?.enabled || this.cache?.enabled) {
+            anthropicBeta = 'prompt-caching-2024-07-31';
         } else {
             anthropicBeta = 'messages-2023-12-15';
         }
@@ -114,22 +116,39 @@ export default class ClaudeClient extends ChatClient {
     }
 
     buildApiParams(userMessage = null, previousMessages = [], systemMessage = null) {
-        // const maxHistoryLength = 20;
         const { messages: history, system } = super.buildApiParams(userMessage, previousMessages, systemMessage);
-        // merge all consecutive messages from the same author
         const mergedMessageHistory = [];
         let lastMessage = null;
+        const cacheEnabled = this.options?.cacheOptions?.enabled || this.cache?.enabled || false;
+
         for (const message of history) {
             if (lastMessage && lastMessage.role === message.role) {
-                lastMessage.content += `${message.content}`;
+                const lastContent = lastMessage.content[lastMessage.content.length - 1];
+                lastContent.text += message.content;
             } else {
-                lastMessage = message;
-                mergedMessageHistory.push(message);
+                const messageWithCache = {
+                    role: message.role,
+                    content: [{
+                        type: 'text',
+                        text: message.content,
+                        ...(cacheEnabled && { cache_control: { type: 'ephemeral' } })
+                    }]
+                };
+                lastMessage = messageWithCache;
+                mergedMessageHistory.push(messageWithCache);
             }
         }
+
+        const systemWithCache = system ? [{
+            type: 'text',
+            text: system,
+            ...(cacheEnabled && { cache_control: { type: 'ephemeral' } })
+        }] : undefined;
+
         return {
-            messages: mergedMessageHistory, //.slice(-maxHistoryLength),
-            ...(system ? { system } : {}),
+            messages: mergedMessageHistory,
+            ...(systemWithCache ? { system: systemWithCache } : {})
         };
     }
 }
+

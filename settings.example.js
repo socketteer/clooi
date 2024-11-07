@@ -68,7 +68,7 @@ export default {
         },
         claudeOptions: {
             modelOptions: {
-                model: 'claude-3-opus-20240229',
+                model: 'claude-3-opus-20240229', // 'claude-3-5-sonnet-20241022'
                 max_tokens: 4096,
                 temperature: 1,
                 stream: true,
@@ -76,6 +76,11 @@ export default {
             messageOptions: {
                 systemMessage: '', // fs.readFileSync('./contexts/waluigiASCII.txt', 'utf8'),
                 n: 2,
+            },
+            // Add cache options
+            cacheOptions: {
+                enabled: true, // users can set this to true to enable caching
+                minTokens: 1024, // minimum tokens required for caching (1024 for Sonnet/Opus, 2048 for Haiku)
             },
         },
         infrastructOptions: {
